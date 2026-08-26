@@ -39,8 +39,14 @@ enum NostrEventFactory {
 
     /// SHA-256 event id over the canonical serialization.
     static func computeID(_ event: NostrEvent) -> String {
+        hexEncode(computeIDBytes(event))
+    }
+
+    /// Raw 32-byte id without hex encoding — used internally to avoid double
+    /// hex encode/decode round-trip on signing (saves 2 allocations per publish).
+    static func computeIDBytes(_ event: NostrEvent) -> [UInt8] {
         let digest = SHA256.hash(data: Data(serializedForID(event).utf8))
-        return hexEncode(digest.withUnsafeBytes { Array($0) })
+        return digest.withUnsafeBytes { Array($0) }
     }
 
     /// Signs an event, filling in `id` and `signature`.
@@ -51,9 +57,10 @@ enum NostrEventFactory {
         }
 
         var signed = event
-        signed.id = computeID(signed)
+        let idBytes = computeIDBytes(signed)
+        signed.id = hexEncode(idBytes)
         // BIP-340 signs the raw 32-byte event id; HashDigest wraps those exact bytes.
-        let digest = SHA256Digest(Array(Data(hexString: signed.id) ?? Data()))
+        let digest = SHA256Digest(idBytes)
         guard let signature = try? key.signature(for: digest) else { throw EventError.signingFailed }
         signed.signature = hexEncode(signature.dataRepresentation)
         return signed

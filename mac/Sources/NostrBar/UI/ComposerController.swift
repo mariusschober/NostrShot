@@ -20,7 +20,7 @@ final class ComposerController: NSObject, ObservableObject {
 
     @Published private(set) var phase: Phase = .idle
     @Published var text: String {
-        didSet { services.preferences.draftText = text }
+        didSet { scheduleDraftSave() }
     }
     @Published private(set) var isListening = false
     /// Incremented every time the composer becomes visible; drives refocusing.
@@ -33,6 +33,7 @@ final class ComposerController: NSObject, ObservableObject {
     private var keyMonitor: Any?
     private var pendingNotes: [PendingNote] = []
     private var isClosing = false
+    private var draftSaveTask: Task<Void, Never>?
     private lazy var dictation = DictationController()
 
     /// Called when a publish attempt reveals there is no configured identity.
@@ -70,14 +71,24 @@ final class ComposerController: NSObject, ObservableObject {
         if !wasVisible { animateIn() }
     }
 
-    /// Persists the caret while the user edits the draft.
+    private var cursorSaveTask: Task<Void, Never>?
+
+    /// Persists the caret while the user edits the draft (debounced).
     func cursorMoved(to location: Int) {
         guard isVisible, !isListening, !isClosing else { return }
-        services.preferences.draftCursor = location
+        cursorSaveTask?.cancel()
+        cursorSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.services.preferences.draftCursor = location
+            }
+        }
     }
 
     func hide() {
         guard isVisible, !isClosing else { return }
+        flushDraftSave()
         removeKeyMonitor()
         animateOut()
     }
@@ -98,10 +109,32 @@ final class ComposerController: NSObject, ObservableObject {
 
     private func handleResignKey() {
         guard isVisible, !isClosing else { return }
-        services.preferences.draftText = text
+        flushDraftSave()
         removeKeyMonitor()
         panel.orderOut(nil)
         NSApp.deactivate()
+    }
+
+    private func scheduleDraftSave() {
+        draftSaveTask?.cancel()
+        let current = text
+        draftSaveTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                // Only write if text hasn't changed again (coalesced)
+                if self.text == current {
+                    self.services.preferences.draftText = current
+                }
+            }
+        }
+    }
+
+    private func flushDraftSave() {
+        draftSaveTask?.cancel()
+        draftSaveTask = nil
+        services.preferences.draftText = text
     }
 
     /// Opens centered on the screen the user is working on (screen with mouse).
@@ -178,7 +211,10 @@ final class ComposerController: NSObject, ObservableObject {
 
         let note = PendingNote(body: body)
         pendingNotes.append(note)
+        // Flush draft before clearing to avoid debounce write racing with clear.
+        flushDraftSave()
         text = ""
+        services.preferences.draftText = ""
         hide()
         phase = .idle
 

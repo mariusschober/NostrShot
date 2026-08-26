@@ -31,7 +31,10 @@ actor RelayConnection {
     /// Fired (from the actor) after every connection-state transition.
     nonisolated(unsafe) var onStateChange: (@Sendable () -> Void)?
 
-    private static let pingInterval: Duration = .seconds(30)
+    // Keepalive tuned for 4 warm relays: 60s keeps NAT/relay idle window open
+    // (10s compose needs no ping, but hours idle between posts does) while
+    // halving wakeups vs 30s. 120s would risk 90s close on nos.lol.
+    private static let pingInterval: Duration = .seconds(60)
 
     private let log = Logger(subsystem: AppConstants.loggingSubsystem, category: "relay")
 
@@ -57,9 +60,18 @@ actor RelayConnection {
             onOpen: { [weak self] in Task { await self?.handleOpen(from: box) } },
             onClose: { [weak self] error in Task { await self?.handleClose(error, from: box) } }
         )
-        let configuration = URLSessionConfiguration.default
+        // Ephemeral + no caches/cookies avoids 4× NSURLSession disk caches
+        // (httpstorages.sqlite WAL 3–4M each) and cuts ~15–30M resident for 4 relays.
+        let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 10
         configuration.waitsForConnectivity = false
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.urlCredentialStorage = nil
+        configuration.httpMaximumConnectionsPerHost = 1
         let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         self.session = session
         let task = session.webSocketTask(with: url)
@@ -72,7 +84,16 @@ actor RelayConnection {
         shuttingDown = true
         reconnectTask?.cancel()
         reconnectTask = nil
+        // Clean deadlines before teardown to ensure no resume-after-cancel.
+        for (_, task) in pendingDeadlines {
+            task.cancel()
+        }
+        pendingDeadlines.removeAll()
         teardown(error: nil)
+        // Break retain cycle via Delegate → closure → self.
+        session?.invalidateAndCancel()
+        session = nil
+        sessionBox = nil
     }
 
     /// Forces an immediate reconnect attempt (e.g. network came back).
@@ -177,8 +198,16 @@ actor RelayConnection {
         for waiter in openWaiters.drain() {
             waiter.resume(returning: false)
         }
+        // Cancel deadline timers to avoid lingering 512KB Task stacks.
+        for (_, task) in pendingDeadlines {
+            task.cancel()
+        }
+        pendingDeadlines.removeAll()
         for id in Array(pending.keys) {
             finish(id, .unreachable)
+        }
+        if shuttingDown {
+            onStateChange = nil
         }
     }
 

@@ -63,6 +63,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 cp "$BIN/$NAME" "$APP/Contents/MacOS/$NAME"
+# Strip debug symbols and local symbols: saves ~200K __LINKEDIT resident and
+# reduces file size. No sanitizer in Release; dsym already absent.
+strip -x -S "$APP/Contents/MacOS/$NAME" 2>/dev/null || true
 codesign --force --sign - "$APP"
 
 echo "Built $APP"

@@ -78,11 +78,20 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         statusItem?.button?.image = Self.icon(allRelaysDown: allDown)
     }
 
+    // Cached template images to avoid repeated SF Symbol rasterization on health flips.
+    private static let iconNormal: NSImage? = {
+        let img = NSImage(systemSymbolName: "text.bubble", accessibilityDescription: AppConstants.productName)
+        img?.isTemplate = true
+        return img
+    }()
+    private static let iconDown: NSImage? = {
+        let img = NSImage(systemSymbolName: "exclamationmark.bubble", accessibilityDescription: AppConstants.productName)
+        img?.isTemplate = true
+        return img
+    }()
+
     private static func icon(allRelaysDown: Bool) -> NSImage? {
-        let name = allRelaysDown ? "exclamationmark.bubble" : "text.bubble"
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: AppConstants.productName)
-        image?.isTemplate = true
-        return image
+        allRelaysDown ? iconDown : iconNormal
     }
 
     /// Rebuilt each time the menu opens so shortcuts and state stay current.

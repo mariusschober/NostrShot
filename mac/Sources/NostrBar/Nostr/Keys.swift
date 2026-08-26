@@ -91,8 +91,21 @@ enum Keys {
 
 // MARK: - Hex
 
+/// Fast hex encoding without `String(format:)` per byte (avoids temporary NSString
+/// allocations observed in Allocations instrument during mass signing).
+private let hexDigits: [UInt8] = Array("0123456789abcdef".utf8)
+
 func hexEncode<S: Sequence>(_ bytes: S) -> String where S.Element == UInt8 {
-    bytes.map { String(format: "%02x", $0) }.joined()
+    var chars: [UInt8] = []
+    // Reserve capacity when possible to avoid reallocations.
+    if let collection = bytes as? any Collection {
+        chars.reserveCapacity(collection.count * 2)
+    }
+    for byte in bytes {
+        chars.append(hexDigits[Int(byte >> 4)])
+        chars.append(hexDigits[Int(byte & 0x0F)])
+    }
+    return String(bytes: chars, encoding: .utf8) ?? ""
 }
 
 extension Data {

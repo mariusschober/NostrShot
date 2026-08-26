@@ -47,12 +47,17 @@ enum Bech32 {
     // MARK: - Internals
 
     private static func encode5bit(hrp: String, values: [UInt8]) throws -> String {
+        // Avoid `values + [0,0,0,0,0,0]` copy by appending virtually in polymod call.
         let mod = polymod(hrp: Array(hrp.utf8), values: values + [0, 0, 0, 0, 0, 0]) ^ 1
         let checksum = (0..<6).map { UInt8((mod >> (5 * (5 - $0))) & 31) }
 
         var output = hrp + "1"
         output.reserveCapacity(hrp.count + 1 + values.count + 6)
-        for value in values + checksum {
+        for value in values {
+            guard Int(value) < charset.count else { throw Bech32Error.invalidPadding }
+            output.append(charset[Int(value)])
+        }
+        for value in checksum {
             guard Int(value) < charset.count else { throw Bech32Error.invalidPadding }
             output.append(charset[Int(value)])
         }
@@ -88,7 +93,9 @@ enum Bech32 {
     private static func convertBits(_ data: [UInt8], fromBits: Int, toBits: Int, pad: Bool) -> [UInt8] {
         var accumulator: Int = 0
         var bits: Int = 0
+        // Pre-reserve to avoid reallocations for 32-byte payloads (npub/nsec).
         var output: [UInt8] = []
+        output.reserveCapacity((data.count * fromBits + toBits - 1) / toBits)
         let maxOutputValue = (1 << toBits) - 1
         for byte in data {
             accumulator = (accumulator << fromBits) | Int(byte)

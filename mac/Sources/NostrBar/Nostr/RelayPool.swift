@@ -5,6 +5,7 @@ import os
 actor RelayPool {
     private var connections: [URL: RelayConnection] = [:]
     private let log = Logger(subsystem: AppConstants.loggingSubsystem, category: "relay-pool")
+    private var healthDebounceTask: Task<Void, Never>?
 
     /// Called on a background task whenever aggregate health may have changed.
     /// `true` means every configured relay is currently disconnected.
@@ -30,6 +31,16 @@ actor RelayPool {
     }
 
     private func healthDidChange() async {
+        // Debounce burst of 4 connects at launch (<1s) into single callback.
+        healthDebounceTask?.cancel()
+        healthDebounceTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard let self, !Task.isCancelled else { return }
+            await self.emitHealth()
+        }
+    }
+
+    private func emitHealth() async {
         var allDown = !connections.isEmpty
         for connection in connections.values {
             if await connection.state == .connected {
@@ -54,6 +65,8 @@ actor RelayPool {
     }
 
     func shutdownAll() {
+        healthDebounceTask?.cancel()
+        healthDebounceTask = nil
         for connection in connections.values {
             Task { await connection.shutdown() }
         }
@@ -78,58 +91,59 @@ actor RelayPool {
     ///
     /// Returns `true` as soon as any relay accepts. Remaining relays continue
     /// broadcasting in the background; their responses resolve independently.
+    /// Fixed: previous AsyncStream early-return leaked the stream until last
+    /// relay finished (3s) and left buffer orphaned on rapid-fire publishes.
     func publish(_ event: NostrEvent) async -> Bool {
         let message = NostrEventFactory.relayMessage(event)
         let targets = Array(connections.values)
         guard !targets.isEmpty else { return false }
 
-        // Every relay completes on its own bounded deadline; the stream ends
-        // when the last result arrives. Early return on first acceptance —
-        // remaining relays keep broadcasting independently.
-        let box = CountdownBox(count: targets.count)
-        let results = AsyncStream<RelayConnection.PublishResult> { continuation in
+        // Use a gate that resumes the outer continuation on first acceptance
+        // or last failure, allowing remaining relays to continue publishing
+        // in detached Tasks without leaking AsyncStream buffers.
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+            let gate = PublishGate(count: targets.count, continuation: continuation)
             for connection in targets {
                 Task {
                     let result = await connection.publish(id: event.id, messageJSON: message)
-                    continuation.yield(result)
-                    if box.isLast() {
-                        continuation.finish()
-                    }
+                    await gate.report(result)
                 }
             }
         }
-
-        for await result in results {
-            if case .accepted = result {
-                return true
-            }
-        }
-        return false
     }
 }
 
-/// Thread-safe one-shot countdown used to finish the publish result stream
-/// exactly once, after every relay has reported.
-private final class CountdownBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var count: Int
+/// Gate that resumes exactly once: on first `.accepted` or when all relays
+/// have reported failure. Remaining reports after success are dropped.
+private actor PublishGate {
+    private var remaining: Int
+    private var finished = false
+    private let continuation: CheckedContinuation<Bool, Never>
 
-    init(count: Int) {
-        self.count = count
+    init(count: Int, continuation: CheckedContinuation<Bool, Never>) {
+        self.remaining = count
+        self.continuation = continuation
     }
 
-    /// Decrements and returns true exactly once, when the count hits zero.
-    func isLast() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        count -= 1
-        if count == 0 {
-            return true
+    func report(_ result: RelayConnection.PublishResult) {
+        guard !finished else {
+            // Still countdown to avoid leak, but don't resume twice.
+            remaining -= 1
+            return
         }
-        if count < 0 {
-            assertionFailure("CountdownBox underflow")
+        if case .accepted = result {
+            finished = true
+            continuation.resume(returning: true)
+            remaining -= 1
+            return
         }
-        return false
+        remaining -= 1
+        if remaining == 0 {
+            finished = true
+            continuation.resume(returning: false)
+        } else if remaining < 0 {
+            assertionFailure("PublishGate underflow")
+        }
     }
 }
 
