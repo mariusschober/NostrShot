@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Secret ciphertext must not be backed up: Keystore key won't restore -->
+    <exclude domain="file" path="nostr_secret.enc" />
+    <exclude domain="file" path="datastore/" />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="database" path="." />
+</full-backup-content>
