@@ -1,0 +1,5 @@
+# Android / Gradle build artifacts and machine-specific config
+/local.properties
+.gradle/
+build/
+app/build/
