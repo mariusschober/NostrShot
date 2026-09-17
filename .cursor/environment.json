@@ -1,0 +1,5 @@
+{
+  "name": "NostrShot (Android)",
+  "user": "ubuntu",
+  "install": "bash ./.cursor/install.sh"
+}
