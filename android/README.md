@@ -36,7 +36,7 @@ Working name **Nostr Post** is isolated to `strings.xml:app_name` + `application
 - Haptics: `KEYBOARD_TAP` on first char, `CONFIRM` on Publish; cursor pulse `1→0.55` 900 ms.
 - Time-aware placeholder `08:42 · Morning — What's on your mind?`
 - Single draft (DataStore debounced 300 ms + `onPause` save, survives rotation / process death, cleared only on success).
-- `Publish` enabled only when `trim().isNotEmpty()` && `!publishing`; spring `AnimatedContent` → `✓ Published` → `finishAndRemoveTask()` 420 ms.
+- `Publish` enabled only when `trim().isNotEmpty()` && `!publishing`; spring `AnimatedContent` → `✓ Published` with **Copy link / Open / Done** actions; auto-closes after 8 s. The copied `nevent1…` includes relay hints (NIP-19).
 - `Back` preserves draft, no dialog. `FLAG_SECURE` only on import screen.
 
 ### Signing
@@ -52,7 +52,7 @@ Working name **Nostr Post** is isolated to `strings.xml:app_name` + `application
 
 **Fallback — local encrypted nsec:**
 
-- Import `nsec1…` (Bech32 32 bytes, hrp `nsec`) or `64-char hex`, validated via `secp256k1.secKeyVerify`.
+- Import `nsec1…` (Bech32 32 bytes, hrp `nsec`) or `64-char hex`, validated via `secp256k1.secKeyVerify`; the key is parsed directly into bytes and the full npub must be confirmed before saving. You can also create a brand-new identity and are shown its nsec exactly once for backup.
 - Derive x-only pubkey, verify, encrypt `AES/GCM/NoPadding` 256-bit, `iv12 || ciphertext+tag` in `files/nostr_secret.enc` (`MODE_PRIVATE`), excluded from `backup_rules.xml` + `data_extraction_rules.xml` (cloud + device-transfer).
 - Wrapping key: `AndroidKeyStore` `AES`, `BLOCK_MODE_GCM`, `RANDOMIZED_REQUIRED true`, `USER_AUTH_REQUIRED false` (fast mode — device unlocked sufficient), `StrongBox` if `FEATURE_STRONGBOX_KEYSTORE` else TEE, record `StrongBox / Hardware-backed / Software` via `KeyInfo` (`API31+ securityLevel`). Decrypt only inside `signLocally`, `fill(0)` after.
 
@@ -65,15 +65,15 @@ Concurrent `OkHttp` `WebSocket` to defaults (diverse, free, current):
 - `wss://relay.nostr.band`
 - `wss://relay.primal.net`
 
-Editable in Settings: add `wss://` (allow `ws://` debug), remove, reset defaults. Validate `wss://`. Send `["EVENT", eventObj]`, await `["OK", id, true, msg]`, `timeout 8s` per relay + global `8500 ms`, first `true` with matching `id` = success, close others. No persistent service/WorkManager.
+Editable in Settings: add `wss://` (allow `ws://` only in debug builds), remove, reset defaults. URLs are parsed, normalized and de-duplicated; release builds declare `usesCleartextTraffic=false`. Send `["EVENT", eventObj]`, await `["OK", id, true, msg]`, `timeout 8s` per relay + global `8500 ms`, first `true` with matching `id` = success, close others. No persistent service/WorkManager.
 
 ### System capture — not an app
 
 - **Splash** `Theme.SplashScreen` `installSplashScreen()` 120 ms, icon = widget glyph.
-- **Share target** `ACTION_SEND text/plain` → any app Share → composer prefilled `take(560)`.
+- **Share target** `ACTION_SEND text/plain` → any app Share → merged into the draft (no truncation). The launch Intent is consumed once, and shares received before setup are queued until setup completes.
 - **Quick Settings tile** `QuickPostTileService` (`BIND_QUICK_SETTINGS_TILE`, `PendingIntent` for 14+) → swipe down → tap → composer. Add via `adb shell cmd statusbar add-tile custom(com.nostrpost.app/.tile.QuickPostTileService)`.
 - **App shortcuts** long-press icon → `New post` (`quick_compose`).
-- **Widget** `Glance 1.1.1` `QuickPostWidget` `SizeMode.Exact`, `1×1` `ColorProvider #6B4EFF` → `✎ Post`, `clickable(actionStartActivity(Intent(ctx, MainActivity).putExtra("quick_compose",true)))`, `widget_quick_post.xml` 40dp, `resizeMode horizontal`. Light/dark.
+- **Widget** `Glance 1.1.1` `QuickPostWidget` `SizeMode.Exact`, `1×1` → `✎ Post`, `clickable(actionStartActivity(Intent(ctx, MainActivity).putExtra("quick_compose",true)))`, `widget_quick_post.xml` 56dp with a real `previewLayout`, `resizeMode horizontal|vertical`. Light/dark aware. Launcher uses an adaptive icon with a monochrome layer.
 - **Predictive back** `enableOnBackInvokedCallback=true`, draft survives.
 
 ### Settings
@@ -94,7 +94,7 @@ Editable in Settings: add `wss://` (allow `ws://` debug), remove, reset defaults
 | UI | Jetpack Compose BOM 2026.06.00, Material3 1.4.0, `activity-compose 1.13.0`, `lifecycle-runtime-compose 2.10.0`, `core-splashscreen 1.0.1` | Edge-to-edge, dynamic color |
 | Storage | `datastore-preferences 1.2.1` | Single draft + prefs, no DB |
 | Widget | `glance-appwidget 1.1.1` | System shutter |
-| Crypto | `fr.acinq.secp256k1:secp256k1-kmp:0.15.0` + `jni-android 0.15.0` | BIP-340 via `libsecp256k1` JNI, auditable, smaller than `quartz`/`nostr-java` |
+| Crypto | `fr.acinq.secp256k1:secp256k1-kmp:0.24.0` + `jni-android 0.24.0` | BIP-340 via 16 KB-aligned `libsecp256k1` JNI (Android 15+), auditable |
 | Net | `okhttp 4.12.0` | WebSocket |
 | Async | `coroutines-android 1.10.2` | `StateFlow`, `withTimeout` |
 | Desugar | `desugar_jdk_libs 2.1.5` | `java.time` on API 28 |
@@ -179,7 +179,7 @@ adb shell cmd statusbar add-tile custom\(com.nostrpost.app/.tile.QuickPostTileSe
 ## Testing
 
 ```bash
-./gradlew testDebugUnitTest   # 7 tests: Bech32, pubkey 79BE..., canonical 23sp, sign/verify, tamper
+./gradlew testDebugUnitTest   # crypto, relay completion, signer verification, Keystore, NIP-19, import, preferences
 ./gradlew lint
 ```
 

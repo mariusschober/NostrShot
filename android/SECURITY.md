@@ -11,34 +11,28 @@ Preferred: **external NIP-55 signer** (Amber, etc.). App never receives private 
 - Detect via `nostrsigner:` queries.
 - Request only `sign_event` kind 1.
 - Try `ContentResolver` background if remembered; fallback to `Intent`.
-- Verify returned event: kind==1, content byte-exact, tags `[]`, timestamp expected, id == sha256(canonical), Schnorr `verifySchnorr` with pubkey, sig matches `result`.
+- Verify returned event against the exact `UnsignedEvent` sent: kind==1, content byte-exact, empty tags, exact `created_at`, pubkey, id == sha256(canonical), Schnorr `verifySchnorr`; the `result` signature must match `event.sig`. Any change is rejected, not just logged.
 - Reject on `rejected==true`, missing fields, verification fail.
 - Handle signer uninstalled → "Signer unavailable", do not silently fallback.
 
 ## Local secret handling
 
-- Import: `nsec1` (Bech32 hrp nsec, 32 bytes) or hex 64 chars, validated, pubkey derived via `secp256k1.pubkeyCreate` (x-only), then encrypted and original input cleared (`fill(0)`).
+- Import: `nsec1` (Bech32 hrp nsec, 32 bytes) or hex 64 chars, parsed directly into a `ByteArray` (no extra hex String), validated, pubkey derived via `secp256k1.pubkeyCreate` (x-only), encrypted, then the byte buffer is zeroed in `finally`. The full npub must be confirmed before saving.
+- The Clipboard is cleared after a successful import only when it still contains the imported key; unrelated clipboard content is never touched. JVM `String` input cannot be securely zeroed — this is a bounded best-effort improvement, not a guarantee.
 - Keystore: `ALIAS nostr_wrap_key`, `AES/GCM/NoPadding`, 256-bit, `RANDOMIZED_REQUIRED`, `USER_AUTH_REQUIRED false`. StrongBox attempted if `FEATURE_STRONGBOX_KEYSTORE`, else TEE.
+- Reading a secret **never** creates or deletes the wrapping key. If the key is missing/invalidated or the ciphertext fails authentication, a typed `SecretUnavailableException` asks the user to re-import; only an explicit Remove Key deletes the alias. Writes go to a temp file, `fsync`, then atomic rename.
 - Ciphertext: `files/nostr_secret.enc` = `iv(12) || ciphertext+tag`. Private file, `MODE_PRIVATE`.
 - Decrypt only for signing, `fill(0)` after, not in ViewModel/Compose/savedState.
 - Protection level exposed via `KeyInfo` (StrongBox / Hardware-backed / Software) in Settings.
 
-## Backup exclusions
+## Backup
 
-```xml
-<!-- backup_rules.xml + data_extraction_rules.xml -->
-<exclude domain="file" path="nostr_secret.enc" />
-<exclude domain="file" path="datastore/" />
-<exclude domain="sharedpref" path="." />
-<exclude domain="database" path="." />
-```
-
-Keystore wrapping keys do not migrate; ciphertext would be unusable after restore, hence excluded. User retains nsec independently; app is not backup.
+`android:allowBackup="false"`. Nothing (secret, draft, relays) leaves the device through Android backup or device transfer. Keystore wrapping keys do not migrate and the ciphertext would be unusable after restore; the user must keep their nsec independently.
 
 ## Screenshot / clipboard / logs
 
 - `FLAG_SECURE` on import screen only (blocks screenshots, recents). Composer not secured (content public).
-- Clipboard: accept paste, validate, encrypt, clear input; no auto-copy of secrets; no clipboard cleanup that destroys unrelated content.
+- Clipboard: accept paste, validate, encrypt; clear the primary clip only if it still equals the just-imported secret; no auto-copy of secrets and no cleanup of unrelated content.
 - Logs policy: dev logs may contain relay URL, event id, timing, signer mode, relay OK; **never** nsec, priv bytes, AES key, plaintext import. Release builds minimal logs. Audited via `grep -R nsec|private|secret` before release.
 
 ## Permissions
@@ -51,7 +45,7 @@ Keystore wrapping keys do not migrate; ciphertext would be unusable after restor
 | Threat | Expected |
 |---|---|
 | Attacker reads app data dir | Cannot recover key without Keystore (hardware-bound). |
-| Cloud backup of files | Secret excluded; restore requires re-import. |
+| Cloud backup / device transfer | Disabled entirely (`allowBackup=false`); restore requires re-import. |
 | Malicious signer returns altered event | Event verification catches (id/sig/content mismatch). |
 | Relay receives forged event | Already verified locally before send. |
 | Logs collected | No private key. |
@@ -67,7 +61,7 @@ Inherent limitation: locally signing app must expose plaintext secp256k1 secret 
 - `androidx.*` (Compose, Glance, DataStore, lifecycle) — UI persistence.
 - `kotlinx-coroutines`, `kotlinx-serialization-json` — async/json.
 - `okhttp:4.12.0` — WebSocket.
-- `fr.acinq.secp256k1:secp256k1-kmp:0.15.0` (+ jni) — BIP340. Why: smallest proven secp256k1, libsecp256k1 JNI, auditable.
+- `fr.acinq.secp256k1:secp256k1-kmp:0.24.0` (+ jni) — BIP340, 16 KB-aligned native library for Android 15+.
 - `bcprov-jdk18on:1.81` — SHA helpers (MessageDigest also used).
 Pinned versions, no DI/analytics/network abstractions.
 

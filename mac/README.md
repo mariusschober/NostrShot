@@ -67,7 +67,7 @@ First launch shows a tiny setup window: paste your private key (`nsec1…` or 64
 | `⌘↩` | Publish (composer closes instantly) |
 | `Esc` | Close — draft and caret are kept |
 
-All shortcuts are user-configurable in Settings. Menu bar: **left-click** opens a new post, **right-click / control-click** opens the menu (New Post, Capture Selection, Dictate, Copy Last Note Link, Settings…, Quit).
+All shortcuts are user-configurable in Settings. Menu bar: **left-click** opens a new post, **right-click / control-click** opens the menu (New Post, Capture Selection, Dictate, Copy Last Note Link — known broken, see backlog NOSTRSHOT-14 — Settings…, Quit).
 
 ## Security
 

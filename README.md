@@ -22,7 +22,7 @@ NostrShot/
 ```bash
 cd mac
 swift build
-open mac/NostrBar.xcodeproj # or swift run
+swift run        # or build the app bundle with scripts/build_app.sh
 ```
 
 **Android:**

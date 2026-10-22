@@ -1,0 +1,23 @@
+# Gradle / Android build output
+.gradle/
+build/
+.kotlin/
+local.properties
+
+# Signing material must never be committed
+*.jks
+*.keystore
+*.p12
+*.pepk
+keystore.properties
+
+# Build artifacts
+*.apk
+*.aab
+*.ap_
+dist/
+
+# IDE
+.idea/
+*.iml
+.cxx/
