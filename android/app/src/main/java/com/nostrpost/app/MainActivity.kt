@@ -191,11 +191,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        // Initial check
+        // Initial check: never leave the app on a spinner if storage cannot be read.
         LaunchedEffect(Unit) {
-            val isSetup = prefs.isSetupFlow.first()
+            val isSetup = try {
+                prefs.isSetupFlow.first()
+            } catch (_: Exception) {
+                false
+            }
             setupNeeded = !isSetup
             if (!isSetup) nav = "setup"
+        }
+        LaunchedEffect(Unit) {
+            Preferences.preferencesResetEvents.collect {
+                Toast.makeText(
+                    context,
+                    "Stored settings were reset because they could not be read",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
 
         when {

@@ -1,19 +1,37 @@
 package com.nostrpost.app.storage
 
 import android.content.Context
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.*
+import androidx.datastore.preferences.core.Preferences as DataStorePreferences
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
-private val Context.dataStore by preferencesDataStore(name = "nostr_post_prefs")
+private val Context.dataStore by preferencesDataStore(
+    name = "nostr_post_prefs",
+    corruptionHandler = ReplaceFileCorruptionHandler {
+        Preferences.notifyPreferencesReset()
+        emptyPreferences()
+    }
+)
+
+/**
+ * DataStore IO errors must never leave the app on a spinner. Fall back to empty preferences so
+ * the user still reaches setup/composer; a corrupt file is replaced and reported once.
+ */
+internal fun Flow<DataStorePreferences>.recoverWithEmpty(): Flow<DataStorePreferences> =
+    catch { emit(emptyPreferences()) }
 
 /**
  * Keys that belong to the *identity* only. Clearing the identity (change/remove signer) must
  * never touch the user's draft or relay list.
  */
-internal fun identityPreferenceKeys(): Set<Preferences.Key<*>> = setOf(
+internal fun identityPreferenceKeys(): Set<DataStorePreferences.Key<*>> = setOf(
     Preferences.KEY_PUBKEY,
     Preferences.KEY_NPUB,
     Preferences.KEY_SIGNER_MODE,
@@ -30,6 +48,13 @@ internal fun clearIdentityKeys(prefs: MutablePreferences) {
 class Preferences(private val context: Context) {
 
     companion object {
+        private val _preferencesReset = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+        val preferencesResetEvents: SharedFlow<Unit> = _preferencesReset
+
+        internal fun notifyPreferencesReset() {
+            _preferencesReset.tryEmit(Unit)
+        }
+
         val KEY_DRAFT = stringPreferencesKey("draft")
         val KEY_IS_SETUP = booleanPreferencesKey("is_setup")
         val KEY_SIGNER_MODE = stringPreferencesKey("signer_mode") // "nip55" | "local"
@@ -41,15 +66,15 @@ class Preferences(private val context: Context) {
         val KEY_PENDING_SHARE = stringPreferencesKey("pending_share")
     }
 
-    val draftFlow: Flow<String> = context.dataStore.data.map { it[KEY_DRAFT] ?: "" }
-    val isSetupFlow: Flow<Boolean> = context.dataStore.data.map { it[KEY_IS_SETUP] ?: false }
-    val signerModeFlow: Flow<String?> = context.dataStore.data.map { it[KEY_SIGNER_MODE] }
-    val pubkeyFlow: Flow<String?> = context.dataStore.data.map { it[KEY_PUBKEY] }
-    val signerPackageFlow: Flow<String?> = context.dataStore.data.map { it[KEY_SIGNER_PACKAGE] }
-    val keyProtectionFlow: Flow<String?> = context.dataStore.data.map { it[KEY_KEY_PROTECTION] }
-    val pendingShareFlow: Flow<String?> = context.dataStore.data.map { it[KEY_PENDING_SHARE] }
+    val draftFlow: Flow<String> = context.dataStore.data.recoverWithEmpty().map { it[KEY_DRAFT] ?: "" }
+    val isSetupFlow: Flow<Boolean> = context.dataStore.data.recoverWithEmpty().map { it[KEY_IS_SETUP] ?: false }
+    val signerModeFlow: Flow<String?> = context.dataStore.data.recoverWithEmpty().map { it[KEY_SIGNER_MODE] }
+    val pubkeyFlow: Flow<String?> = context.dataStore.data.recoverWithEmpty().map { it[KEY_PUBKEY] }
+    val signerPackageFlow: Flow<String?> = context.dataStore.data.recoverWithEmpty().map { it[KEY_SIGNER_PACKAGE] }
+    val keyProtectionFlow: Flow<String?> = context.dataStore.data.recoverWithEmpty().map { it[KEY_KEY_PROTECTION] }
+    val pendingShareFlow: Flow<String?> = context.dataStore.data.recoverWithEmpty().map { it[KEY_PENDING_SHARE] }
 
-    val relaysFlow: Flow<List<String>> = context.dataStore.data.map { prefs ->
+    val relaysFlow: Flow<List<String>> = context.dataStore.data.recoverWithEmpty().map { prefs ->
         val json = prefs[KEY_RELAYS]
         if (json.isNullOrBlank()) com.nostrpost.app.nostr.RelayConfig.DEFAULT_RELAYS
         else {
