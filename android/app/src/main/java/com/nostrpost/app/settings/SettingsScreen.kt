@@ -15,6 +15,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import com.nostrpost.app.nostr.Bech32
+import com.nostrpost.app.nostr.RelayConfig
 import com.nostrpost.app.signing.Nip55
 import kotlinx.coroutines.launch
 
@@ -170,11 +171,11 @@ fun SettingsScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
                             val v = addRelayText.trim()
-                            if (v.startsWith("wss://") || v.startsWith("ws://")) {
+                            if (RelayConfig.isValidRelayUrl(v)) {
                                 onAddRelay(v)
                                 addRelayText = ""
                             }
-                        }, enabled = addRelayText.trim().startsWith("wss://") || addRelayText.trim().startsWith("ws://")) {
+                        }, enabled = RelayConfig.isValidRelayUrl(addRelayText)) {
                             Text("Add")
                         }
                         OutlinedButton(onClick = onResetRelays) { Text("Reset defaults") }

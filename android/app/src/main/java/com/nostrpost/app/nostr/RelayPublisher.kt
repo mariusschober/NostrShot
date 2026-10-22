@@ -99,6 +99,19 @@ class RelayPublisher internal constructor(
             val jobs = mutableListOf<Deferred<RelayAttempt>>()
 
             for (relay in relays) {
+                // Re-validate at connect time: an old stored ws:// relay must not be dialled in
+                // a release build even if it predates the URL checks in Settings.
+                if (!RelayConfig.isValidRelayUrl(relay)) {
+                    mutex.withLock {
+                        attempts.add(
+                            RelayAttempt.Unreachable(
+                                relay,
+                                "insecure or invalid relay URL (wss:// required)"
+                            )
+                        )
+                    }
+                    continue
+                }
                 val job = async(Dispatchers.IO) {
                     val attempt = try {
                         publishToRelay(relay, signed.id, payload, timeoutMs)
