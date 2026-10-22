@@ -114,52 +114,6 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) {}
         }
 
-        // Debug auto-import for testing (only in debug builds)
-        val autoNsec = if (BuildConfig.DEBUG) intent.getStringExtra("auto_import_nsec") else null
-        val autoContent = intent.getStringExtra("auto_content")
-        if (autoNsec != null && BuildConfig.DEBUG) {
-            lifecycleScope.launch {
-                try {
-                    val hex: String
-                    val pubHex: String
-                    val trimmed = autoNsec.trim()
-                    if (trimmed.startsWith("nsec1")) {
-                        val bytes = Bech32.decodeNsec(trimmed)
-                        hex = Hex.encode(bytes)
-                        pubHex = NostrCrypto.pubkeyFromPrivBytes(bytes)
-                        bytes.fill(0)
-                    } else if (trimmed.matches(Regex("[0-9a-fA-F]{64}"))) {
-                        hex = trimmed.lowercase()
-                        val bytes = Hex.decode(hex)
-                        pubHex = NostrCrypto.pubkeyFromPrivBytes(bytes)
-                        bytes.fill(0)
-                    } else {
-                        throw IllegalArgumentException("Invalid auto nsec")
-                    }
-                    val prot = secretStore.getProtectionLevel() ?: "Hardware-backed"
-                    signerRepo.storeLocalIdentity(hex, pubHex, prot)
-                    android.util.Log.i("MainActivity", "auto import succeeded pub=$pubHex")
-                    if (autoContent != null) {
-                        kotlinx.coroutines.delay(800)
-                        viewModel.onContentChange(autoContent)
-                        kotlinx.coroutines.delay(400)
-                        viewModel.onPublishClicked()
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("MainActivity", "auto import failed: ${e.message}", e)
-                }
-            }
-        } else if (autoContent != null) {
-            android.util.Log.i("MainActivity", "auto_content in onCreate: $autoContent")
-            lifecycleScope.launch {
-                kotlinx.coroutines.delay(800)
-                viewModel.onContentChange(autoContent)
-                kotlinx.coroutines.delay(400)
-                android.util.Log.i("MainActivity", "triggering publish for auto_content")
-                viewModel.onPublishClicked()
-            }
-        }
-
         // Collect effects
         lifecycleScope.launch {
             viewModel.effect.collect { effect ->
@@ -196,47 +150,6 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         handleShareIntent(intent)
         pendingQuickCompose = intent.getBooleanExtra("quick_compose", false) || intent.getStringExtra("quick_compose") == "1"
-        val autoNsec2 = if (BuildConfig.DEBUG) intent.getStringExtra("auto_import_nsec") else null
-        val autoContent2 = intent.getStringExtra("auto_content")
-        if (autoNsec2 != null && BuildConfig.DEBUG) {
-            lifecycleScope.launch {
-                try {
-                    val hex: String
-                    val pubHex: String
-                    val trimmed = autoNsec2.trim()
-                    if (trimmed.startsWith("nsec1")) {
-                        val bytes = Bech32.decodeNsec(trimmed)
-                        hex = Hex.encode(bytes)
-                        pubHex = NostrCrypto.pubkeyFromPrivBytes(bytes)
-                        bytes.fill(0)
-                    } else {
-                        hex = trimmed.lowercase()
-                        val bytes = Hex.decode(hex)
-                        pubHex = NostrCrypto.pubkeyFromPrivBytes(bytes)
-                        bytes.fill(0)
-                    }
-                    val prot = secretStore.getProtectionLevel() ?: "Hardware-backed"
-                    signerRepo.storeLocalIdentity(hex, pubHex, prot)
-                    if (autoContent2 != null) {
-                        kotlinx.coroutines.delay(800)
-                        viewModel.onContentChange(autoContent2)
-                        kotlinx.coroutines.delay(400)
-                        viewModel.onPublishClicked()
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("MainActivity", "auto import (newIntent) failed: ${e.message}", e)
-                }
-            }
-        } else if (autoContent2 != null) {
-            android.util.Log.i("MainActivity", "auto_content in onNewIntent: $autoContent2")
-            lifecycleScope.launch {
-                kotlinx.coroutines.delay(500)
-                viewModel.onContentChange(autoContent2)
-                kotlinx.coroutines.delay(400)
-                android.util.Log.i("MainActivity", "triggering publish for auto_content (newIntent)")
-                viewModel.onPublishClicked()
-            }
-        }
     }
 
     private fun handleShareIntent(intent: Intent?) {
