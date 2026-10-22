@@ -338,10 +338,16 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onAddRelay = { url ->
-                        lifecycleScope.launch { prefs.setRelays(relays + url) }
+                        lifecycleScope.launch {
+                            prefs.setRelays(
+                                com.nostrpost.app.nostr.RelayConfig.sanitize(relays + url)
+                            )
+                        }
                     },
                     onRemoveRelay = { url ->
-                        lifecycleScope.launch { prefs.setRelays(relays.filterNot { it == url }) }
+                        lifecycleScope.launch {
+                            prefs.setRelays(relays.filterNot { it == url })
+                        }
                     },
                     onResetRelays = {
                         lifecycleScope.launch { prefs.setRelays(com.nostrpost.app.nostr.RelayConfig.DEFAULT_RELAYS) }

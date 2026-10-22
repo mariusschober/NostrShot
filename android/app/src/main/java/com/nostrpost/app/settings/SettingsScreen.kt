@@ -37,6 +37,13 @@ fun SettingsScreen(
     onBack: () -> Unit
 ) {
     var addRelayText by remember { mutableStateOf("") }
+    val normalizedRelayInput = RelayConfig.normalizeOrNull(addRelayText)
+    val relayInputError = when {
+        addRelayText.isBlank() -> null
+        normalizedRelayInput == null -> "Enter a valid wss:// relay URL"
+        RelayConfig.isDuplicate(addRelayText, relays) -> "Already in the list"
+        else -> null
+    }
     var showRemoveConfirm by remember { mutableStateOf(false) }
     var showChangeConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -169,17 +176,19 @@ fun SettingsScreen(
                         onValueChange = { addRelayText = it },
                         placeholder = { Text("wss://…") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        isError = relayInputError != null,
+                        supportingText = {
+                            if (relayInputError != null) Text(relayInputError)
+                        }
                     )
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
-                            val v = addRelayText.trim()
-                            if (RelayConfig.isValidRelayUrl(v)) {
-                                onAddRelay(v)
-                                addRelayText = ""
-                            }
-                        }, enabled = RelayConfig.isValidRelayUrl(addRelayText)) {
+                            val v = normalizedRelayInput ?: return@Button
+                            onAddRelay(v)
+                            addRelayText = ""
+                        }, enabled = normalizedRelayInput != null && relayInputError == null) {
                             Text("Add")
                         }
                         OutlinedButton(onClick = onResetRelays) { Text("Reset defaults") }

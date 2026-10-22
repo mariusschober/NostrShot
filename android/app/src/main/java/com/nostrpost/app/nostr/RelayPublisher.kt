@@ -98,14 +98,15 @@ class RelayPublisher internal constructor(
             val attempts = mutableListOf<RelayAttempt>()
             val jobs = mutableListOf<Deferred<RelayAttempt>>()
 
-            for (relay in relays) {
-                // Re-validate at connect time: an old stored ws:// relay must not be dialled in
-                // a release build even if it predates the URL checks in Settings.
-                if (!RelayConfig.isValidRelayUrl(relay)) {
+            for (rawRelay in relays) {
+                // Re-validate and normalize at connect time: an old stored ws:// relay must not
+                // be dialled in a release build even if it predates the URL checks in Settings.
+                val relay = RelayConfig.normalizeOrNull(rawRelay)
+                if (relay == null) {
                     mutex.withLock {
                         attempts.add(
                             RelayAttempt.Unreachable(
-                                relay,
+                                rawRelay,
                                 "insecure or invalid relay URL (wss:// required)"
                             )
                         )
@@ -148,7 +149,8 @@ class RelayPublisher internal constructor(
             val snapshot = mutex.withLock {
                 // Guarantee one outcome per relay even if a cancellation beat its timer, so the
                 // caller always gets a bounded, explainable result instead of an empty list.
-                relays.forEach { relay ->
+                relays.forEach { rawRelay ->
+                    val relay = RelayConfig.normalizeOrNull(rawRelay) ?: rawRelay
                     if (attempts.none { it.relay == relay }) {
                         attempts.add(RelayAttempt.Timeout(relay))
                     }
