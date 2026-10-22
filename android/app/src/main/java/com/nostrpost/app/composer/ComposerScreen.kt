@@ -3,12 +3,16 @@ package com.nostrpost.app.composer
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -20,10 +24,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nostrpost.app.R
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ComposerScreen(
     state: ComposerState,
@@ -93,19 +97,18 @@ fun ComposerScreen(
                     Text(
                         text = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm")),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.28f),
-                        modifier = Modifier.alpha(0.9f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                        modifier = Modifier.alpha(0.95f)
                     )
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .combinedClickable(
-                                onClick = { tick(); onSettingsClick() },
-                                onLongClick = { tick(); onSettingsClick() }
-                            ),
-                        contentAlignment = Alignment.Center
+                    IconButton(
+                        onClick = { tick(); onSettingsClick() },
+                        modifier = Modifier.size(48.dp)
                     ) {
-                        Text("· · ·", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.22f))
+                        Icon(
+                            painter = painterResource(R.drawable.ic_settings),
+                            contentDescription = stringResource(R.string.cd_settings),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
@@ -119,7 +122,7 @@ fun ComposerScreen(
                             style = TextStyle(
                                 fontSize = 23.sp,
                                 lineHeight = 32.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                                 fontWeight = FontWeight.Normal
                             ),
                             modifier = Modifier.padding(top = 2.dp)
@@ -151,7 +154,10 @@ fun ComposerScreen(
                     Surface(
                         color = MaterialTheme.colorScheme.errorContainer,
                         shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp)
+                            .semantics { liveRegion = LiveRegionMode.Polite }
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
@@ -198,7 +204,15 @@ fun ComposerScreen(
                             label = "publishContent"
                         ) { success ->
                             if (success) {
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.alpha(successScale)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .alpha(successScale)
+                                        .semantics {
+                                            liveRegion = LiveRegionMode.Polite
+                                            stateDescription = "Published"
+                                        }
+                                ) {
                                     Text("✓", color = MaterialTheme.colorScheme.primary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                                     Spacer(Modifier.width(6.dp))
                                     Text("Published", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
@@ -209,7 +223,10 @@ fun ComposerScreen(
                                     enabled = state.content.trim().isNotEmpty() && !state.isPublishing,
                                     modifier = Modifier
                                         .height(50.dp)
-                                        .defaultMinSize(minWidth = 128.dp),
+                                        .defaultMinSize(minWidth = 128.dp)
+                                        .semantics {
+                                            if (state.isPublishing) stateDescription = "Publishing"
+                                        },
                                     shape = MaterialTheme.shapes.extraLarge,
                                     contentPadding = PaddingValues(horizontal = 28.dp, vertical = 14.dp),
                                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp, pressedElevation = 1.dp)
@@ -235,7 +252,7 @@ fun ComposerScreen(
                     Text(
                         text = "${state.content.length}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.22f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
                         modifier = Modifier.align(Alignment.End).padding(bottom = 2.dp)
                     )
                 }
