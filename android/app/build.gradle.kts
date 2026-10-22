@@ -80,8 +80,8 @@ dependencies {
     // Networking
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     // Secp256k1 KMP - schnorr sign/verify (pinned, see ARCHITECTURE)
-    implementation("fr.acinq.secp256k1:secp256k1-kmp:0.15.0")
-    implementation("fr.acinq.secp256k1:secp256k1-kmp-jni-android:0.15.0")
+    implementation("fr.acinq.secp256k1:secp256k1-kmp:0.24.0")
+    implementation("fr.acinq.secp256k1:secp256k1-kmp-jni-android:0.24.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
@@ -89,7 +89,7 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.16.1")
     testImplementation("androidx.test:core:1.6.1")
-    testImplementation("fr.acinq.secp256k1:secp256k1-kmp-jni-jvm:0.15.0")
+    testImplementation("fr.acinq.secp256k1:secp256k1-kmp-jni-jvm:0.24.0")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
 
