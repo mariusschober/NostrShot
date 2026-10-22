@@ -28,6 +28,7 @@ fun SetupScreen(
     signerLabels: List<String>,
     onConnectSigner: () -> Unit,
     onUseLocal: () -> Unit,
+    onCreateNew: () -> Unit,
     onInstallAmber: () -> Unit
 ) {
     Column(
@@ -141,9 +142,16 @@ fun SetupScreen(
         ) {
             Text("Store key on this device", fontSize = 15.sp)
         }
+        Spacer(Modifier.height(8.dp))
+        Button(
+            onClick = onCreateNew,
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) {
+            Text("Create a new identity", fontSize = 15.sp)
+        }
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "Encrypted with Android’s hardware-backed Keystore when available. Less isolated than a dedicated signer.",
+            text = "New here? Create a key and back up the nsec when it is shown. Encrypted with Android’s hardware-backed Keystore when available. Less isolated than a dedicated signer.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             textAlign = TextAlign.Center

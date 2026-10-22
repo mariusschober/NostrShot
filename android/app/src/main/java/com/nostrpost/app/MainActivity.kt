@@ -29,6 +29,8 @@ import com.nostrpost.app.composer.ComposerScreen
 import com.nostrpost.app.composer.ComposerViewModel
 import com.nostrpost.app.nostr.RelayPublisher
 import com.nostrpost.app.security.AndroidKeystoreSecretStore
+import com.nostrpost.app.settings.ConfirmIdentityScreen
+import com.nostrpost.app.settings.CreateIdentityScreen
 import com.nostrpost.app.settings.ImportScreen
 import com.nostrpost.app.settings.SettingsScreen
 import com.nostrpost.app.settings.SetupScreen
@@ -192,8 +194,10 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun AppRoot() {
         var setupNeeded by remember { mutableStateOf<Boolean?>(null) }
-        var nav by remember { mutableStateOf("composer") } // composer, setup, import, settings
+        var nav by remember { mutableStateOf("composer") } // composer, setup, import, confirm, create, settings
         var importError by remember { mutableStateOf<String?>(null) }
+        var pendingImport by remember { mutableStateOf<KeyImport.Result.Ok?>(null) }
+        var pendingImportRaw by remember { mutableStateOf<String?>(null) }
         var composeState by remember { mutableStateOf(viewModel.state.value) }
         var signerAvailable by remember { mutableStateOf(false) }
         var signerLabels by remember { mutableStateOf(emptyList<String>()) }
@@ -266,6 +270,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                     onUseLocal = { nav = "import" },
+                    onCreateNew = { nav = "create" },
                     onInstallAmber = {
                         try {
                             val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/greenart7c3/Amber"))
@@ -286,31 +291,74 @@ class MainActivity : ComponentActivity() {
                 }
                 ImportScreen(
                     onImport = { input ->
-                        lifecycleScope.launch {
-                            importError = null
-                            when (val parsed = KeyImport.parse(input)) {
-                                is KeyImport.Result.Error -> {
-                                    importError = parsed.message
-                                }
-                                is KeyImport.Result.Ok -> {
-                                    try {
-                                        // Store; the repository records the real protection
-                                        // level returned by the Keystore after key creation.
-                                        signerRepo.storeLocalIdentity(parsed.secret, parsed.pubkeyHex)
-                                        clearClipboardIfMatches(input)
-                                        Toast.makeText(context, "Key imported securely", Toast.LENGTH_SHORT).show()
-                                        nav = "composer"
-                                    } catch (e: Exception) {
-                                        importError = e.message ?: "Import failed"
-                                    } finally {
-                                        parsed.secret.fill(0)
-                                    }
-                                }
+                        importError = null
+                        when (val parsed = KeyImport.parse(input)) {
+                            is KeyImport.Result.Error -> {
+                                importError = parsed.message
+                            }
+                            is KeyImport.Result.Ok -> {
+                                // Do not save yet: show the full npub and require confirmation.
+                                pendingImport?.secret?.fill(0)
+                                pendingImport = parsed
+                                pendingImportRaw = input
+                                nav = "confirm"
                             }
                         }
                     },
                     onBack = { nav = "setup" },
                     error = importError
+                )
+            }
+            nav == "confirm" -> {
+                val pending = pendingImport
+                if (pending == null) {
+                    LaunchedEffect(Unit) { nav = "import" }
+                } else {
+                    ConfirmIdentityScreen(
+                        pubkeyHex = pending.pubkeyHex,
+                        onConfirm = {
+                            lifecycleScope.launch {
+                                try {
+                                    signerRepo.storeLocalIdentity(pending.secret, pending.pubkeyHex)
+                                    pendingImportRaw?.let { clearClipboardIfMatches(it) }
+                                    Toast.makeText(context, "Key imported securely", Toast.LENGTH_SHORT).show()
+                                    nav = "composer"
+                                } catch (e: Exception) {
+                                    importError = e.message ?: "Import failed"
+                                    nav = "import"
+                                } finally {
+                                    pending.secret.fill(0)
+                                    pendingImport = null
+                                    pendingImportRaw = null
+                                }
+                            }
+                        },
+                        onBack = {
+                            pending.secret.fill(0)
+                            pendingImport = null
+                            pendingImportRaw = null
+                            nav = "import"
+                        }
+                    )
+                }
+            }
+            nav == "create" -> {
+                CreateIdentityScreen(
+                    onCreate = { secret, pubkeyHex ->
+                        lifecycleScope.launch {
+                            try {
+                                signerRepo.storeLocalIdentity(secret, pubkeyHex)
+                                Toast.makeText(context, "New identity created", Toast.LENGTH_SHORT).show()
+                                nav = "composer"
+                            } catch (e: Exception) {
+                                importError = e.message ?: "Could not create identity"
+                                nav = "setup"
+                            } finally {
+                                secret.fill(0)
+                            }
+                        }
+                    },
+                    onBack = { nav = "setup" }
                 )
             }
             nav == "settings" -> {
