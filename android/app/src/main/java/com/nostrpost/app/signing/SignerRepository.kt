@@ -11,7 +11,9 @@ import com.nostrpost.app.nostr.SignedEvent
 import com.nostrpost.app.nostr.UnsignedEvent
 import com.nostrpost.app.security.AndroidKeystoreSecretStore
 import com.nostrpost.app.storage.Preferences
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
@@ -65,9 +67,9 @@ class SignerRepository(
     /**
      * Sign via local store (decrypt, sign, clear).
      */
-    suspend fun signLocally(content: String): SignOutcome {
-        return try {
-            val pubkey = getStoredPubkey() ?: return SignOutcome.Error("No pubkey")
+    suspend fun signLocally(content: String): SignOutcome = withContext(Dispatchers.IO) {
+        try {
+            val pubkey = getStoredPubkey() ?: return@withContext SignOutcome.Error("No pubkey")
             val unsigned = EventFactory.createUnsigned(pubkey, content)
             val canonical = EventFactory.canonicalJson(unsigned)
             val id = EventFactory.computeId(canonical)
@@ -78,7 +80,7 @@ class SignerRepository(
                 val signed = EventFactory.createSigned(unsigned, sig)
                 // verify before return
                 if (!EventVerifier.verify(signed, unsigned)) {
-                    return SignOutcome.Error("Verification failed after local sign")
+                    return@withContext SignOutcome.Error("Verification failed after local sign")
                 }
                 SignOutcome.Signed(signed)
             } finally {
@@ -98,23 +100,23 @@ class SignerRepository(
     /**
      * Attempt background ContentResolver signing. Null means fallback to Intent needed.
      */
-    suspend fun tryBackgroundSign(content: String): SignOutcome? {
+    suspend fun tryBackgroundSign(content: String): SignOutcome? = withContext(Dispatchers.IO) {
         val mode = getStoredSignerMode()
-        if (mode != "nip55") return null
-        val pubkey = getStoredPubkey() ?: return SignOutcome.Error("No pubkey")
-        val pkg = getStoredSignerPackage() ?: return SignOutcome.Error("No signer package")
+        if (mode != "nip55") return@withContext null
+        val pubkey = getStoredPubkey() ?: return@withContext SignOutcome.Error("No pubkey")
+        val pkg = getStoredSignerPackage() ?: return@withContext SignOutcome.Error("No signer package")
         // check package still installed
-        if (!isPackageInstalled(pkg)) return SignOutcome.SignerUnavailable
+        if (!isPackageInstalled(pkg)) return@withContext SignOutcome.SignerUnavailable
 
         val unsigned = EventFactory.createUnsigned(pubkey, content)
         val eventJsonForSigner = EventFactory.unsignedToSignerJson(unsigned)
         val result = Nip55.tryContentResolverSign(context, eventJsonForSigner, pkg, pubkey)
-        return when (result) {
+        when (result) {
             is SignResult.Success -> {
                 try {
                     val signed = EventFactory.signedEventFromJson(result.signedEventJson)
                     val error = SignerVerification.errorFor(signed, unsigned, result.signature)
-                    if (error != null) return SignOutcome.Error(error)
+                    if (error != null) return@withContext SignOutcome.Error(error)
                     SignOutcome.Signed(signed)
                 } catch (e: Exception) {
                     SignOutcome.Error("Malformed signed event from signer: ${e.message}")
@@ -145,16 +147,16 @@ class SignerRepository(
      * Build intent for interactive signing (to be launched via registerForActivityResult).
      * The caller keeps [SignRequest.unsigned] and verifies the response against it.
      */
-    suspend fun buildSignIntent(content: String): SignRequest? {
-        val pubkey = getStoredPubkey() ?: return null
-        val pkg = getStoredSignerPackage() ?: return null
-        if (!isPackageInstalled(pkg)) return null
+    suspend fun buildSignIntent(content: String): SignRequest? = withContext(Dispatchers.IO) {
+        val pubkey = getStoredPubkey() ?: return@withContext null
+        val pkg = getStoredSignerPackage() ?: return@withContext null
+        if (!isPackageInstalled(pkg)) return@withContext null
         val unsigned = EventFactory.createUnsigned(pubkey, content)
         val eventJson = EventFactory.unsignedToSignerJson(unsigned)
         // Use id as extra for correlation (optional)
         val id = EventFactory.computeId(EventFactory.canonicalJson(unsigned))
         val intent = Nip55.createSignEventIntent(eventJson, pubkey, pkg, id)
-        return SignRequest(intent, unsigned)
+        SignRequest(intent, unsigned)
     }
 
     /**

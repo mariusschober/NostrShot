@@ -17,7 +17,9 @@ import androidx.compose.ui.platform.LocalContext
 import com.nostrpost.app.nostr.Bech32
 import com.nostrpost.app.nostr.RelayConfig
 import com.nostrpost.app.signing.Nip55
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SettingsScreen(
@@ -96,7 +98,9 @@ fun SettingsScreen(
                                 val hex = pubkeyHex
                                 if (pkg != null && hex != null) {
                                     scope.launch {
-                                        val ok = Nip55.isBackgroundAvailable(context, pkg, hex)
+                                        val ok = withContext(Dispatchers.IO) {
+                                            Nip55.isBackgroundAvailable(context, pkg, hex)
+                                        }
                                         backgroundCheck = if (ok) "✓ One-tap ready — device unlock only" else "✗ Still asks PIN — tap Fix"
                                         isChecking = false
                                     }

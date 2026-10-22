@@ -1,5 +1,6 @@
 package com.nostrpost.app.security
 
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -12,6 +13,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.util.concurrent.Executors
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 
@@ -148,6 +150,46 @@ class SecretStoreTest {
         assertFalse(file.exists())
         assertEquals(1, provider.deleteCount)
         assertNull(provider.key)
+    }
+
+    @Test
+    fun keystoreIoRunsOnInjectedDispatcher() = runBlocking {
+        val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "keystore-io-test") }
+        val dispatcher = executor.asCoroutineDispatcher()
+        try {
+            val threads = mutableListOf<String>()
+            val provider = object : WrappingKeyProvider {
+                private var key: SecretKey? = null
+
+                override fun getExistingKey(): SecretKey? {
+                    threads += Thread.currentThread().name
+                    return key
+                }
+
+                override fun peekKey(): SecretKey? = getExistingKey()
+
+                override fun getOrCreateKey(): Pair<SecretKey, String> {
+                    val existing = key ?: KeyGenerator.getInstance("AES").apply { init(256) }
+                        .generateKey().also { key = it }
+                    return Pair(existing, "Software")
+                }
+
+                override fun deleteKey() {
+                    key = null
+                }
+            }
+            val file = File(tmp.root, "dispatched.enc")
+            val store = AndroidKeystoreSecretStore(provider, file, dispatcher)
+            store.storeSecret(ByteArray(32) { 5 }) {}
+            store.loadSecret()
+            assertTrue(threads.isNotEmpty())
+            assertTrue(
+                "Keystore work must not run on the caller thread: $threads",
+                threads.all { it.startsWith("keystore-io-test") }
+            )
+        } finally {
+            dispatcher.close()
+        }
     }
 
     @Test

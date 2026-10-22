@@ -7,6 +7,9 @@ import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
 import android.util.Log
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.file.Files
@@ -30,7 +33,8 @@ import javax.crypto.spec.GCMParameterSpec
  */
 class AndroidKeystoreSecretStore internal constructor(
     private val keyProvider: WrappingKeyProvider,
-    private val secretFile: File
+    private val secretFile: File,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : SecretStore {
 
     constructor(context: Context) : this(
@@ -49,15 +53,18 @@ class AndroidKeystoreSecretStore internal constructor(
             "Local key unavailable — the Android Keystore key is gone or invalid. Re-import your nsec."
     }
 
-    override suspend fun hasSecret(): Boolean {
-        return try {
+    override suspend fun hasSecret(): Boolean = withContext(ioDispatcher) {
+        try {
             secretFile.exists() && secretFile.length() > IV_BYTES
         } catch (_: Exception) {
             false
         }
     }
 
-    override suspend fun storeSecret(privKey32: ByteArray, protectionLevelOut: ((String) -> Unit)?) {
+    override suspend fun storeSecret(
+        privKey32: ByteArray,
+        protectionLevelOut: ((String) -> Unit)?
+    ): Unit = withContext(ioDispatcher) {
         require(privKey32.size == 32) { "Private key must be 32 bytes" }
         val (key, level) = try {
             keyProvider.getOrCreateKey()
@@ -136,7 +143,7 @@ class AndroidKeystoreSecretStore internal constructor(
         }
     }
 
-    override suspend fun loadSecret(): ByteArray {
+    override suspend fun loadSecret(): ByteArray = withContext(ioDispatcher) {
         if (!secretFile.exists()) {
             throw SecretUnavailableException(
                 SecretUnavailableException.Reason.KEY_MISSING,
@@ -183,7 +190,7 @@ class AndroidKeystoreSecretStore internal constructor(
             REIMPORT_MESSAGE
         )
 
-        return try {
+        try {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
             cipher.doFinal(ciphertext)
@@ -210,7 +217,7 @@ class AndroidKeystoreSecretStore internal constructor(
         }
     }
 
-    override suspend fun clearSecret() {
+    override suspend fun clearSecret(): Unit = withContext(ioDispatcher) {
         if (secretFile.exists()) {
             try {
                 secretFile.delete()
@@ -229,15 +236,14 @@ class AndroidKeystoreSecretStore internal constructor(
         }
     }
 
-    override suspend fun getProtectionLevel(): String? {
-        return try {
-            val key = keyProvider.peekKey() ?: return null
+    override suspend fun getProtectionLevel(): String? = withContext(ioDispatcher) {
+        try {
+            val key = keyProvider.peekKey() ?: return@withContext null
             keystoreProtectionLevelOf(key)
         } catch (_: Exception) {
             null
         }
     }
-
 }
 
 /** Maps a wrapping key to the user-visible protection level, without ever creating a key. */
