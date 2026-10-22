@@ -76,9 +76,11 @@ private fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
     .build()
 
 class RelayPublisher internal constructor(
-    private val transport: RelayTransport
+    private val transport: RelayTransport,
+    private val networkAvailable: () -> Boolean = { true }
 ) {
-    constructor() : this(OkHttpRelayTransport(defaultClient()))
+    constructor(networkAvailable: () -> Boolean = { true }) :
+        this(OkHttpRelayTransport(defaultClient()), networkAvailable)
 
     /**
      * Publish concurrently to all relays and return success as soon as at least one relay
@@ -89,6 +91,14 @@ class RelayPublisher internal constructor(
         coroutineScope {
             if (relays.isEmpty()) {
                 return@coroutineScope PublishResult(false, null, "No relays configured")
+            }
+            if (!networkAvailable()) {
+                return@coroutineScope PublishResult(
+                    success = false,
+                    relay = null,
+                    error = "You're offline — your draft is saved. Publish again when you're back online.",
+                    retryable = true
+                )
             }
 
             val payload = "[\"EVENT\",${signed.toJson()}]"
@@ -114,12 +124,20 @@ class RelayPublisher internal constructor(
                     continue
                 }
                 val job = async(Dispatchers.IO) {
+                    val startedAt = System.currentTimeMillis()
                     val attempt = try {
                         publishToRelay(relay, signed.id, payload, timeoutMs)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         RelayAttempt.Unreachable(relay, e.message)
+                    }
+                    val elapsed = System.currentTimeMillis() - startedAt
+                    when (attempt) {
+                        is RelayAttempt.Accepted -> RelayHealthStore.recordSuccess(relay, elapsed)
+                        is RelayAttempt.Rejected -> RelayHealthStore.recordFailure(relay, attempt.reason.ifBlank { "rejected" })
+                        is RelayAttempt.Timeout -> RelayHealthStore.recordFailure(relay, "timed out")
+                        is RelayAttempt.Unreachable -> RelayHealthStore.recordFailure(relay, attempt.detail ?: "unreachable")
                     }
                     mutex.withLock {
                         attempts.add(attempt)

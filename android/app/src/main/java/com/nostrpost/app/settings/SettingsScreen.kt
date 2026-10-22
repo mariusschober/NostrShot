@@ -16,6 +16,7 @@ import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import com.nostrpost.app.nostr.Bech32
 import com.nostrpost.app.nostr.RelayConfig
+import com.nostrpost.app.nostr.RelayHealthStore
 import com.nostrpost.app.signing.Nip55
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -164,8 +165,20 @@ fun SettingsScreen(
                     Text("${relays.size} relays — at least one OK counts as published.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(12.dp))
                     relays.forEach { relay ->
+                        val health = RelayHealthStore.forRelay(RelayConfig.normalize(relay))
+                            ?: RelayHealthStore.forRelay(relay)
                         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(relay, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(relay, fontSize = 13.sp)
+                                if (health != null) {
+                                    Text(
+                                        health.statusText(),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (health.lastError != null) MaterialTheme.colorScheme.error
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                             TextButton(onClick = { onRemoveRelay(relay) }) { Text("Remove", fontSize = 12.sp) }
                         }
                         Divider()

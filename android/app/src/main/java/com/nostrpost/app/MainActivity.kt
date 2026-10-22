@@ -104,7 +104,11 @@ class MainActivity : ComponentActivity() {
         viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return ComposerViewModel(prefs, signerRepo, RelayPublisher()) as T
+                return ComposerViewModel(
+                    prefs,
+                    signerRepo,
+                    RelayPublisher { com.nostrpost.app.nostr.NetworkMonitor.isOnline(this@MainActivity) }
+                ) as T
             }
         })[ComposerViewModel::class.java]
 
