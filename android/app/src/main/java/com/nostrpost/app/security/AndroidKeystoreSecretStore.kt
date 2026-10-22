@@ -251,16 +251,17 @@ internal fun keystoreProtectionLevelOf(key: SecretKey): String {
             key,
             android.security.keystore.KeyInfo::class.java
         ) as android.security.keystore.KeyInfo
-        when {
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                info.isInsideSecureHardware &&
-                info.securityLevel == KeyProperties.SECURITY_LEVEL_STRONGBOX -> "StrongBox"
-            info.isInsideSecureHardware -> "Hardware-backed"
-            else -> "Software"
-        }
+        protectionLevelLabel(info.isInsideSecureHardware, info.securityLevel)
     } catch (_: Exception) {
         "Unknown"
     }
+}
+
+/** Pure mapping so the reported security claim can be unit-tested. */
+internal fun protectionLevelLabel(insideSecureHardware: Boolean, securityLevel: Int): String = when {
+    insideSecureHardware && securityLevel == KeyProperties.SECURITY_LEVEL_STRONGBOX -> "StrongBox"
+    insideSecureHardware -> "Hardware-backed"
+    else -> "Software"
 }
 
 /**

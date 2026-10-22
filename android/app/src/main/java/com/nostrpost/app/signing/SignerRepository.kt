@@ -46,13 +46,13 @@ class SignerRepository(
         prefs.setSetupComplete(true)
     }
 
-    suspend fun storeLocalIdentity(privHex: String, pubkeyHex: String, protection: String) {
+    suspend fun storeLocalIdentity(privHex: String, pubkeyHex: String) {
         // priv already validated
         val privBytes = Hex.decode(privHex)
+        var protection = "Unknown"
         try {
-            secretStore.storeSecret(privBytes) { lvl ->
-                // will be saved via prefs below
-            }
+            // The real protection level is only knowable after the wrapping key exists.
+            secretStore.storeSecret(privBytes) { lvl -> protection = lvl }
         } finally {
             privBytes.fill(0)
         }
@@ -60,7 +60,6 @@ class SignerRepository(
         prefs.setSignerMode("local")
         prefs.setKeyProtection(protection)
         prefs.setSetupComplete(true)
-        // Also cache signer package empty
     }
 
     /**

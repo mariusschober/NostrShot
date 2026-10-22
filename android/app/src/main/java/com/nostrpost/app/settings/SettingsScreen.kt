@@ -72,7 +72,7 @@ fun SettingsScreen(
                     } else if (signerMode == "local") {
                         Text("Signing", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                         Text("Stored securely on this device", style = MaterialTheme.typography.bodyLarge)
-                        Text("Protection: ${protectionLevel ?: "checking…"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Protection: ${protectionLevel ?: "Unknown"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         Text("Not set up", color = MaterialTheme.colorScheme.error)
                     }

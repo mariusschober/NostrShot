@@ -263,11 +263,9 @@ class MainActivity : ComponentActivity() {
                                     importError = "Enter nsec1… or 64-char hex"
                                     return@launch
                                 }
-                                // Validate derived pub
-                                // Store
-                                val protection = secretStore.getProtectionLevel() ?: "Hardware-backed"
-                                // Actually need to store via repo which will create key
-                                signerRepo.storeLocalIdentity(hex, pubHex, protection)
+                                // Store; the repository records the real protection level
+                                // returned by the Keystore after the wrapping key exists.
+                                signerRepo.storeLocalIdentity(hex, pubHex)
                                 // clear input
                                 Toast.makeText(context, "Key imported securely", Toast.LENGTH_SHORT).show()
                                 nav = "composer"
@@ -288,15 +286,26 @@ class MainActivity : ComponentActivity() {
                 val pkg by prefs.signerPackageFlow.collectAsState(initial = null)
                 val prot by prefs.keyProtectionFlow.collectAsState(initial = null)
 
+                // Resolve a missing protection level once (e.g. old installs) without a
+                // composable side-effect that could render "checking…" forever.
+                var resolvedProtection by remember(mode, prot) { mutableStateOf(prot) }
+                LaunchedEffect(mode, prot) {
+                    resolvedProtection = if (prot != null) {
+                        prot
+                    } else if (mode == "local") {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            secretStore.getProtectionLevel()
+                        } ?: "Unknown"
+                    } else {
+                        null
+                    }
+                }
+
                 SettingsScreen(
                     pubkeyHex = pubkey,
                     signerMode = mode,
                     signerPackage = pkg,
-                    protectionLevel = prot ?: secretStore.let {
-                        var lvl: String? = null
-                        LaunchedEffect(Unit) { lvl = it.getProtectionLevel() }
-                        lvl
-                    },
+                    protectionLevel = resolvedProtection,
                     relays = relays,
                     onCopyNpub = { npub ->
                         clipboard.setText(AnnotatedString(npub))
