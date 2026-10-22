@@ -12,12 +12,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nostrpost.app.signing.Nip55
+
+/**
+ * Neutral wording for the detected signer row. Never claims a specific app (e.g. Amber) is
+ * installed just because some NIP-55 signer is.
+ */
+internal fun signerSummary(labels: List<String>): String {
+    val label = labels.firstOrNull()?.trim().orEmpty()
+    return if (label.isEmpty()) "NIP-55 signer detected" else "NIP-55 signer detected: $label"
+}
 
 @Composable
 fun SetupScreen(
     hasSigner: Boolean,
-    signerPackages: List<String>,
+    signerLabels: List<String>,
     onConnectSigner: () -> Unit,
     onUseLocal: () -> Unit,
     onInstallAmber: () -> Unit
@@ -67,25 +75,20 @@ fun SetupScreen(
                 Spacer(Modifier.height(8.dp))
                 if (hasSigner) {
                     Text(
-                        text = signerPackages.firstOrNull()?.let { "Detected: ${it.substringAfterLast('.')}" } ?: "Android signer detected",
+                        text = signerSummary(signerLabels),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                    )
-                    Text(
-                        text = "Amber detected" ,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     )
                 } else {
                     Text(
-                        text = "Install Amber (or any NIP-55 signer) to keep your key isolated.",
+                        text = "Install a NIP-55 signer app (for example Amber) to keep your key isolated.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onInstallAmber, modifier = Modifier.fillMaxWidth()) {
-                        Text("Learn about Amber")
+                        Text("Learn about NIP-55 signers")
                     }
                 }
                 Spacer(Modifier.height(4.dp))
@@ -109,13 +112,13 @@ fun SetupScreen(
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "1. Tap “Use Android signer”\n2. In Amber check ☑ “Remember my choice” / “Fully trust” for kind 1\n3. Then device unlock is enough — no Amber PIN each time",
+                            text = "1. Tap “Use Android signer”\n2. In your signer app enable “Remember my choice” / “Fully trust” for kind 1\n3. Then device unlock is enough — no app PIN each time",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "If Amber still asks PIN, open Amber → Settings → Security → set to Device unlock (not App PIN). Other Nostr apps work this way.",
+                            text = "If your signer still asks for a PIN, open its Settings → Security and use device unlock instead of an app PIN.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )

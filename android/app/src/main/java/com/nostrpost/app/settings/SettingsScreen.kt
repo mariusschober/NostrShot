@@ -125,7 +125,7 @@ fun SettingsScreen(
                             Text(backgroundCheck!!, style = MaterialTheme.typography.bodySmall, color = if (backgroundCheck!!.startsWith("✓")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                             if (backgroundCheck!!.startsWith("✗")) {
                                 Spacer(Modifier.height(6.dp))
-                                Text("Fix: In Amber, delete Nostr Post app → reconnect → check ☑ Remember → fully trust kind 1. Then set Amber Settings → Security → unlock with device instead of Amber PIN.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Fix: In your signer app, remove Nostr Post → reconnect → enable Remember / trust for kind 1. Then set the signer to unlock with your device instead of an app PIN.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.height(8.dp))
                                 OutlinedButton(
                                     onClick = {
@@ -138,7 +138,7 @@ fun SettingsScreen(
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth()
-                                ) { Text("Open Amber") }
+                                ) { Text("Open signer") }
                             }
                         }
                         Spacer(Modifier.height(8.dp))

@@ -30,6 +30,23 @@ object Nip55 {
         return infos.isNotEmpty()
     }
 
+    fun getSignerLabel(context: Context, packageName: String): String {
+        return try {
+            val info = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getApplicationInfo(
+                    packageName,
+                    PackageManager.ApplicationInfoFlags.of(0)
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getApplicationInfo(packageName, 0)
+            }
+            context.packageManager.getApplicationLabel(info).toString()
+        } catch (_: Exception) {
+            packageName.substringAfterLast('.')
+        }
+    }
+
     fun getSignerPackages(context: Context): List<String> {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse("nostrsigner:"))
         val infos = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {

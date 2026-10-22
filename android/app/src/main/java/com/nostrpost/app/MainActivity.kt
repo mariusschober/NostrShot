@@ -19,9 +19,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.nostrpost.app.composer.ComposerScreen
 import com.nostrpost.app.composer.ComposerViewModel
 import com.nostrpost.app.nostr.Bech32
@@ -176,7 +179,23 @@ class MainActivity : ComponentActivity() {
         var nav by remember { mutableStateOf("composer") } // composer, setup, import, settings
         var importError by remember { mutableStateOf<String?>(null) }
         var composeState by remember { mutableStateOf(viewModel.state.value) }
+        var signerAvailable by remember { mutableStateOf(false) }
+        var signerLabels by remember { mutableStateOf(emptyList<String>()) }
         val context = LocalContext.current
+        val lifecycleOwner = LocalLifecycleOwner.current
+
+        // Re-query installed signers whenever Setup is visible again (e.g. the user installed a
+        // signer in the browser and came back). Queries are off the main thread.
+        LaunchedEffect(lifecycleOwner) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                val state = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val packages = Nip55.getSignerPackages(context)
+                    Pair(packages.isNotEmpty(), packages.map { Nip55.getSignerLabel(context, it) })
+                }
+                signerAvailable = state.first
+                signerLabels = state.second
+            }
+        }
         val clipboard = LocalClipboardManager.current
 
         // Observe viewModel state
@@ -218,11 +237,9 @@ class MainActivity : ComponentActivity() {
                 }
             }
             nav == "setup" -> {
-                val hasSigner = remember { Nip55.isSignerAvailable(context) }
-                val packages = remember { Nip55.getSignerPackages(context) }
                 SetupScreen(
-                    hasSigner = hasSigner,
-                    signerPackages = packages,
+                    hasSigner = signerAvailable,
+                    signerLabels = signerLabels,
                     onConnectSigner = {
                         val perms = Nip55.permissionsForKind1()
                         val intent = Nip55.createGetPublicKeyIntent(perms)
