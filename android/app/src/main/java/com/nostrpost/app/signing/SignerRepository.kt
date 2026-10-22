@@ -48,16 +48,15 @@ class SignerRepository(
         prefs.setSetupComplete(true)
     }
 
-    suspend fun storeLocalIdentity(privHex: String, pubkeyHex: String) {
-        // priv already validated
-        val privBytes = Hex.decode(privHex)
+    /**
+     * Stores an already-validated 32-byte private key. The caller keeps ownership of
+     * [privKey32] and must zero it afterwards.
+     */
+    suspend fun storeLocalIdentity(privKey32: ByteArray, pubkeyHex: String) {
+        require(privKey32.size == 32) { "Private key must be 32 bytes" }
         var protection = "Unknown"
-        try {
-            // The real protection level is only knowable after the wrapping key exists.
-            secretStore.storeSecret(privBytes) { lvl -> protection = lvl }
-        } finally {
-            privBytes.fill(0)
-        }
+        // The real protection level is only knowable after the wrapping key exists.
+        secretStore.storeSecret(privKey32) { lvl -> protection = lvl }
         prefs.setPubkey(pubkeyHex.lowercase())
         prefs.setSignerMode("local")
         prefs.setKeyProtection(protection)

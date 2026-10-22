@@ -27,14 +27,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.nostrpost.app.composer.ComposerScreen
 import com.nostrpost.app.composer.ComposerViewModel
-import com.nostrpost.app.nostr.Bech32
-import com.nostrpost.app.nostr.Hex
-import com.nostrpost.app.nostr.NostrCrypto
 import com.nostrpost.app.nostr.RelayPublisher
 import com.nostrpost.app.security.AndroidKeystoreSecretStore
 import com.nostrpost.app.settings.ImportScreen
 import com.nostrpost.app.settings.SettingsScreen
 import com.nostrpost.app.settings.SetupScreen
+import com.nostrpost.app.signing.KeyImport
 import com.nostrpost.app.signing.Nip55
 import com.nostrpost.app.signing.SignerRepository
 import com.nostrpost.app.storage.Preferences
@@ -158,6 +156,24 @@ class MainActivity : ComponentActivity() {
         pendingQuickCompose = intent.getBooleanExtra("quick_compose", false) || intent.getStringExtra("quick_compose") == "1"
     }
 
+    /**
+     * Clears the clipboard only when it still contains the imported secret (never unrelated
+     * clipboard content).
+     */
+    private fun clearClipboardIfMatches(imported: String) {
+        try {
+            val clipboard = getSystemService(android.content.ClipboardManager::class.java) ?: return
+            val clip = clipboard.primaryClip ?: return
+            if (clip.itemCount == 0) return
+            val current = clip.getItemAt(0).coerceToText(this).toString()
+            if (current.trim() == imported.trim()) {
+                clipboard.clearPrimaryClip()
+            }
+        } catch (_: Exception) {
+            // Clipboard access is best-effort; never fail the import because of it.
+        }
+    }
+
     private fun handleShareIntent(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
             val shared = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
@@ -272,36 +288,24 @@ class MainActivity : ComponentActivity() {
                     onImport = { input ->
                         lifecycleScope.launch {
                             importError = null
-                            try {
-                                val hex: String
-                                val pubHex: String
-                                if (input.startsWith("nsec1")) {
-                                    val bytes = Bech32.decodeNsec(input)
-                                    hex = Hex.encode(bytes)
-                                    pubHex = NostrCrypto.pubkeyFromPrivBytes(bytes)
-                                    bytes.fill(0)
-                                } else if (input.matches(Regex("[0-9a-fA-F]{64}"))) {
-                                    hex = input.lowercase()
-                                    if (!NostrCrypto.isValidPrivHex(hex)) {
-                                        importError = "Invalid secret key"
-                                        return@launch
-                                    }
-                                    val bytes = Hex.decode(hex)
-                                    pubHex = NostrCrypto.pubkeyFromPrivBytes(bytes)
-                                    bytes.fill(0)
-                                } else {
-                                    importError = "Enter nsec1… or 64-char hex"
-                                    return@launch
+                            when (val parsed = KeyImport.parse(input)) {
+                                is KeyImport.Result.Error -> {
+                                    importError = parsed.message
                                 }
-                                // Store; the repository records the real protection level
-                                // returned by the Keystore after the wrapping key exists.
-                                signerRepo.storeLocalIdentity(hex, pubHex)
-                                // clear input
-                                Toast.makeText(context, "Key imported securely", Toast.LENGTH_SHORT).show()
-                                nav = "composer"
-                                hex.toCharArray().fill('0') // not real clear but ok
-                            } catch (e: Exception) {
-                                importError = e.message ?: "Import failed"
+                                is KeyImport.Result.Ok -> {
+                                    try {
+                                        // Store; the repository records the real protection
+                                        // level returned by the Keystore after key creation.
+                                        signerRepo.storeLocalIdentity(parsed.secret, parsed.pubkeyHex)
+                                        clearClipboardIfMatches(input)
+                                        Toast.makeText(context, "Key imported securely", Toast.LENGTH_SHORT).show()
+                                        nav = "composer"
+                                    } catch (e: Exception) {
+                                        importError = e.message ?: "Import failed"
+                                    } finally {
+                                        parsed.secret.fill(0)
+                                    }
+                                }
                             }
                         }
                     },
