@@ -6,6 +6,7 @@ import kotlinx.coroutines.sync.withLock
 import okhttp3.*
 import okio.ByteString
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Result of one relay attempt. */
 sealed class RelayAttempt {
@@ -131,7 +132,16 @@ class RelayPublisher internal constructor(
                 jobs.forEach { it.cancel() }
             }
 
-            val snapshot = mutex.withLock { attempts.toList() }
+            val snapshot = mutex.withLock {
+                // Guarantee one outcome per relay even if a cancellation beat its timer, so the
+                // caller always gets a bounded, explainable result instead of an empty list.
+                relays.forEach { relay ->
+                    if (attempts.none { it.relay == relay }) {
+                        attempts.add(RelayAttempt.Timeout(relay))
+                    }
+                }
+                attempts.toList()
+            }
             val failures = snapshot.filterNot { it is RelayAttempt.Accepted }.map { it.toFailure() }
             val duplicate = snapshot.filterIsInstance<RelayAttempt.Rejected>().firstOrNull { it.isDuplicate }
 
@@ -160,16 +170,16 @@ class RelayPublisher internal constructor(
         payload: String,
         timeoutMs: Long
     ): RelayAttempt = suspendCancellableCoroutine { cont ->
-        var done = false
+        val finished = AtomicBoolean(false)
         var timer: Job? = null
         var socket: RelaySocket? = null
 
+        // Exactly-once completion: onMessage/onFailure/onClosed/timeout can race on different
+        // OkHttp threads. tryResume is safe even if cancellation won the race.
         fun finish(result: RelayAttempt) {
-            if (!done) {
-                done = true
-                timer?.cancel()
-                if (cont.isActive) cont.resume(result) {}
-            }
+            if (!finished.compareAndSet(false, true)) return
+            timer?.cancel()
+            if (cont.isActive) cont.resume(result) {}
         }
 
         val listener = object : RelaySocketListener {
@@ -202,7 +212,7 @@ class RelayPublisher internal constructor(
             }
 
             override fun onClosed(code: Int, reason: String) {
-                if (!done) {
+                if (!finished.get()) {
                     finish(
                         RelayAttempt.Unreachable(
                             relayUrl,
@@ -220,7 +230,7 @@ class RelayPublisher internal constructor(
             null
         }
 
-        if (!done && socket != null) {
+        if (!finished.get() && socket != null) {
             timer = CoroutineScope(Dispatchers.IO).launch {
                 delay(timeoutMs)
                 try { socket.close(1000, "timeout") } catch (_: Exception) {}
@@ -308,7 +318,4 @@ private class OkHttpRelaySocket(private val webSocket: WebSocket) : RelaySocket 
     override fun cancel() = webSocket.cancel()
 }
 
-// Extension for suspendCancellableCoroutine with resume helper
-private fun <T> CancellableContinuation<T>.resume(value: T, onCancellation: (() -> Unit)?) {
-    if (isActive) resumeWith(Result.success(value))
-}
+
