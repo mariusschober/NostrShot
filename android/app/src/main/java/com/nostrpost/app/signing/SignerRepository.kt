@@ -78,7 +78,7 @@ class SignerRepository(
                 val sig = NostrCrypto.sign(idBytes, privBytes)
                 val signed = EventFactory.createSigned(unsigned, sig)
                 // verify before return
-                if (!EventVerifier.verify(signed, expectedContent = content, expectedPubkey = pubkey)) {
+                if (!EventVerifier.verify(signed, unsigned)) {
                     return SignOutcome.Error("Verification failed after local sign")
                 }
                 SignOutcome.Signed(signed)
@@ -114,10 +114,8 @@ class SignerRepository(
             is SignResult.Success -> {
                 try {
                     val signed = EventFactory.signedEventFromJson(result.signedEventJson)
-                    if (!EventVerifier.verify(signed, expectedContent = content, expectedPubkey = pubkey)) {
-                        return SignOutcome.Error("External signer returned invalid event")
-                    }
-                    // Also verify id matches our computed? Use signed's id
+                    val error = SignerVerification.errorFor(signed, unsigned, result.signature)
+                    if (error != null) return SignOutcome.Error(error)
                     SignOutcome.Signed(signed)
                 } catch (e: Exception) {
                     SignOutcome.Error("Malformed signed event from signer: ${e.message}")
@@ -141,10 +139,14 @@ class SignerRepository(
         } catch (_: Exception) { false }
     }
 
+    /** The exact unsigned event plus the Intent that asks the signer to sign it. */
+    data class SignRequest(val intent: android.content.Intent, val unsigned: UnsignedEvent)
+
     /**
      * Build intent for interactive signing (to be launched via registerForActivityResult).
+     * The caller keeps [SignRequest.unsigned] and verifies the response against it.
      */
-    suspend fun buildSignIntent(content: String): android.content.Intent? {
+    suspend fun buildSignIntent(content: String): SignRequest? {
         val pubkey = getStoredPubkey() ?: return null
         val pkg = getStoredSignerPackage() ?: return null
         if (!isPackageInstalled(pkg)) return null
@@ -152,13 +154,14 @@ class SignerRepository(
         val eventJson = EventFactory.unsignedToSignerJson(unsigned)
         // Use id as extra for correlation (optional)
         val id = EventFactory.computeId(EventFactory.canonicalJson(unsigned))
-        return Nip55.createSignEventIntent(eventJson, pubkey, pkg, id)
+        val intent = Nip55.createSignEventIntent(eventJson, pubkey, pkg, id)
+        return SignRequest(intent, unsigned)
     }
 
     /**
-     * Parse result from sign_event Intent.
+     * Parse result from sign_event Intent and require it to match [expected] exactly.
      */
-    fun parseSignResult(data: android.content.Intent?, expectedContent: String, expectedPubkey: String): SignOutcome {
+    fun parseSignResult(data: android.content.Intent?, expected: UnsignedEvent): SignOutcome {
         if (data == null) return SignOutcome.Error("No data from signer")
         val rejected = data.getStringExtra("rejected") ?: data.getStringExtra("rejected".lowercase())
         // Some implementations use boolean extra?
@@ -173,14 +176,8 @@ class SignerRepository(
         }
         return try {
             val signed = EventFactory.signedEventFromJson(eventJson)
-            if (!EventVerifier.verify(signed, expectedContent = expectedContent, expectedPubkey = expectedPubkey)) {
-                return SignOutcome.Error("Signer verification failed")
-            }
-            // sig should match signed.sig
-            if (!signed.sig.equals(sig, ignoreCase = true)) {
-                Log.w("SignerRepo", "Signature mismatch between result and event.sig")
-                // Still accept if event verifies
-            }
+            val error = SignerVerification.errorFor(signed, expected, sig)
+            if (error != null) return SignOutcome.Error(error)
             SignOutcome.Signed(signed)
         } catch (e: Exception) {
             SignOutcome.Error("Failed to parse signed event: ${e.message}")

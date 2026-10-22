@@ -66,13 +66,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // For sign_event interactive fallback
-    private var pendingSignContent: String? = null
+    // For sign_event interactive fallback: keep the exact unsigned event we asked to sign.
+    private var pendingSignEvent: com.nostrpost.app.nostr.UnsignedEvent? = null
     private val signEventLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val content = pendingSignContent
-        if (content != null) {
-            viewModel.onSignerActivityResult(result.data, result.resultCode, content)
-            pendingSignContent = null
+        val expected = pendingSignEvent
+        if (expected != null) {
+            viewModel.onSignerActivityResult(result.data, result.resultCode, expected)
+            pendingSignEvent = null
         }
     }
 
@@ -122,7 +122,7 @@ class MainActivity : ComponentActivity() {
             viewModel.effect.collect { effect ->
                 when (effect) {
                     is com.nostrpost.app.composer.ComposerEffect.LaunchSignerIntent -> {
-                        pendingSignContent = effect.contentSnapshot
+                        pendingSignEvent = effect.unsigned
                         try {
                             signEventLauncher.launch(effect.intent)
                         } catch (e: Exception) {

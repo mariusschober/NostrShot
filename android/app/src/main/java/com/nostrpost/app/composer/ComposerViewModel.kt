@@ -37,7 +37,10 @@ data class ComposerState(
 
 sealed class ComposerEffect {
     object CloseApp : ComposerEffect()
-    data class LaunchSignerIntent(val intent: Intent, val contentSnapshot: String) : ComposerEffect()
+    data class LaunchSignerIntent(
+        val intent: Intent,
+        val unsigned: com.nostrpost.app.nostr.UnsignedEvent
+    ) : ComposerEffect()
     data class ShowMessage(val msg: String) : ComposerEffect()
 }
 
@@ -148,8 +151,8 @@ class ComposerViewModel(
                         bgResult == null -> {
                             // Need interactive intent
                             _state.value = _state.value.copy(isPublishing = false)
-                            val intent = signerRepo.buildSignIntent(content)
-                            if (intent == null) {
+                            val request = signerRepo.buildSignIntent(content)
+                            if (request == null) {
                                 _state.value = _state.value.copy(
                                     errorMessage = "Signer unavailable. Choose another signing method in Settings.",
                                     errorAction = ComposerErrorAction.OPEN_SETTINGS
@@ -157,7 +160,7 @@ class ComposerViewModel(
                                 pendingPublishContent = null
                             } else {
                                 pendingPublishContent = content
-                                _effect.value = ComposerEffect.LaunchSignerIntent(intent, content)
+                                _effect.value = ComposerEffect.LaunchSignerIntent(request.intent, request.unsigned)
                             }
                         }
                         bgResult is SignerRepository.SignOutcome.Signed -> {
@@ -236,7 +239,11 @@ class ComposerViewModel(
         }
     }
 
-    fun onSignerActivityResult(data: Intent?, resultCode: Int, expectedContent: String) {
+    fun onSignerActivityResult(
+        data: Intent?,
+        resultCode: Int,
+        expected: com.nostrpost.app.nostr.UnsignedEvent
+    ) {
         viewModelScope.launch {
             if (resultCode != android.app.Activity.RESULT_OK) {
                 _state.value = _state.value.copy(
@@ -246,8 +253,7 @@ class ComposerViewModel(
                 )
                 return@launch
             }
-            val expectedPubkey = signerRepo.getStoredPubkey() ?: ""
-            val outcome = signerRepo.parseSignResult(data, expectedContent, expectedPubkey)
+            val outcome = signerRepo.parseSignResult(data, expected)
             when (outcome) {
                 is SignerRepository.SignOutcome.Signed -> {
                     _state.value = _state.value.copy(isPublishing = true)
