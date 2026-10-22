@@ -1,6 +1,5 @@
 package com.nostrpost.app.security
 
-import android.security.keystore.KeyProperties
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -11,7 +10,7 @@ class ProtectionLevelTest {
     fun strongBoxIsReportedAsStrongBox() {
         assertEquals(
             "StrongBox",
-            protectionLevelLabel(insideSecureHardware = true, securityLevel = KeyProperties.SECURITY_LEVEL_STRONGBOX)
+            protectionLevelLabel(insideSecureHardware = true, strongBox = true)
         )
     }
 
@@ -19,7 +18,7 @@ class ProtectionLevelTest {
     fun teeIsReportedAsHardwareBacked() {
         assertEquals(
             "Hardware-backed",
-            protectionLevelLabel(insideSecureHardware = true, securityLevel = KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT)
+            protectionLevelLabel(insideSecureHardware = true, strongBox = false)
         )
     }
 
@@ -27,7 +26,7 @@ class ProtectionLevelTest {
     fun softwareKeyIsNeverReportedAsHardware() {
         assertEquals(
             "Software",
-            protectionLevelLabel(insideSecureHardware = false, securityLevel = KeyProperties.SECURITY_LEVEL_SOFTWARE)
+            protectionLevelLabel(insideSecureHardware = false, strongBox = false)
         )
     }
 }
