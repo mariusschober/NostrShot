@@ -89,12 +89,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         // Predictive back already enabled via manifest; ensure window callback
-        // Share target pre-process: only for a fresh launch. On rotation the activity is
-        // recreated with the same launch Intent, which must not be applied a second time.
-        if (savedInstanceState == null) {
-            handleShareIntent(intent)
-        }
-
         pendingQuickCompose = intent.getBooleanExtra("quick_compose", false) ||
                 intent.getStringExtra("quick_compose") == "1" ||
                 intent.data?.toString()?.contains("quick_compose") == true
@@ -112,6 +106,13 @@ class MainActivity : ComponentActivity() {
                 ) as T
             }
         })[ComposerViewModel::class.java]
+
+        // Share target pre-process: only for a fresh launch, and only after the ViewModel exists.
+        // On rotation the activity is recreated with the same launch Intent, which must not be
+        // applied a second time.
+        if (savedInstanceState == null) {
+            handleShareIntent(intent)
+        }
 
         // Speculative signer pre-warm (no UI block)
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -182,6 +183,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleShareIntent(intent: Intent?) {
+        if (!::viewModel.isInitialized) return
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
             val shared = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
             if (!shared.isNullOrBlank()) {
@@ -364,9 +366,9 @@ class MainActivity : ComponentActivity() {
                             } catch (e: Exception) {
                                 importError = e.message ?: "Could not create identity"
                                 nav = "setup"
-                            } finally {
-                                secret.fill(0)
                             }
+                            // The key stays valid until CreateIdentityScreen is disposed; it
+                            // zeroes the buffer itself so a failed save can be retried.
                         }
                     },
                     onBack = { nav = "setup" }
