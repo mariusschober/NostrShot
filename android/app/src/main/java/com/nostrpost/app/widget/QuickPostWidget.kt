@@ -1,6 +1,7 @@
 package com.nostrpost.app.widget
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -24,6 +25,8 @@ import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
+import androidx.glance.semantics.contentDescription
+import androidx.glance.semantics.semantics
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.nostrpost.app.MainActivity
@@ -41,6 +44,9 @@ class QuickPostWidget : GlanceAppWidget() {
     @Composable
     private fun WidgetContent() {
         val ctx = androidx.glance.LocalContext.current
+        val dark = (ctx.resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val background = if (dark) Color(0xFF4F378B) else Color(0xFF6B4EFF)
         val intent = Intent(ctx, MainActivity::class.java).apply {
             putExtra("quick_compose", true)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -48,9 +54,10 @@ class QuickPostWidget : GlanceAppWidget() {
         Box(
             modifier = GlanceModifier
                 .fillMaxSize()
-                .background(ColorProvider(Color(0xFF6B4EFF)))
+                .background(ColorProvider(background))
                 .clickable(actionStartActivity(intent))
-                .padding(12.dp),
+                .semantics { contentDescription = "New Nostr post" }
+                .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -61,16 +68,16 @@ class QuickPostWidget : GlanceAppWidget() {
                 Text(
                     text = "✎",
                     style = TextStyle(
-                        fontSize = 28.sp,
+                        fontSize = 22.sp,
                         fontWeight = FontWeight.Bold,
                         color = ColorProvider(Color.White)
                     )
                 )
-                Spacer(modifier = GlanceModifier.height(2.dp))
+                Spacer(modifier = GlanceModifier.height(1.dp))
                 Text(
                     text = "Post",
                     style = TextStyle(
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
                         color = ColorProvider(Color.White)
                     )
