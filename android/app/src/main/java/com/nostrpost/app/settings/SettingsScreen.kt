@@ -35,6 +35,7 @@ fun SettingsScreen(
 ) {
     var addRelayText by remember { mutableStateOf("") }
     var showRemoveConfirm by remember { mutableStateOf(false) }
+    var showChangeConfirm by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var backgroundCheck by remember { mutableStateOf<String?>(null) }
@@ -129,7 +130,7 @@ fun SettingsScreen(
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        OutlinedButton(onClick = onChangeSigner, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(onClick = { showChangeConfirm = true }, modifier = Modifier.fillMaxWidth()) {
                             Text("Change signer")
                         }
                         Spacer(Modifier.height(4.dp))
@@ -199,13 +200,27 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { showRemoveConfirm = false },
             title = { Text("Remove key?") },
-            text = { Text("Your private key will be deleted from this device. You must have a backup elsewhere.") },
+            text = { Text("Your private key will be deleted from this device. Your draft and relay list are kept. You must have a backup elsewhere.") },
             confirmButton = {
                 Button(onClick = { showRemoveConfirm = false; onRemoveKey() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
                     Text("Remove")
                 }
             },
             dismissButton = { TextButton(onClick = { showRemoveConfirm = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showChangeConfirm) {
+        AlertDialog(
+            onDismissRequest = { showChangeConfirm = false },
+            title = { Text("Change signer?") },
+            text = { Text("The current identity is removed from this device. Your draft and relay list are kept. You will choose a signer or import a key next.") },
+            confirmButton = {
+                Button(onClick = { showChangeConfirm = false; onChangeSigner() }) {
+                    Text("Change")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showChangeConfirm = false }) { Text("Cancel") } }
         )
     }
 }

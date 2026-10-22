@@ -205,8 +205,12 @@ class SignerRepository(
         return Pair(pubkey.lowercase(), pkg)
     }
 
+    /**
+     * Remove the current identity. The draft and relay list are intentionally preserved:
+     * switching signers must not discard an unpublished note or a curated relay set.
+     */
     suspend fun clearIdentity() {
-        prefs.clearAll()
+        prefs.clearIdentityOnly()
         try { secretStore.clearSecret() } catch (_: Exception) {}
     }
 }

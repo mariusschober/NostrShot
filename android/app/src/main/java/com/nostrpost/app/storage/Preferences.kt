@@ -9,6 +9,24 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "nostr_post_prefs")
 
+/**
+ * Keys that belong to the *identity* only. Clearing the identity (change/remove signer) must
+ * never touch the user's draft or relay list.
+ */
+internal fun identityPreferenceKeys(): Set<Preferences.Key<*>> = setOf(
+    Preferences.KEY_PUBKEY,
+    Preferences.KEY_NPUB,
+    Preferences.KEY_SIGNER_MODE,
+    Preferences.KEY_SIGNER_PACKAGE,
+    Preferences.KEY_IS_SETUP,
+    Preferences.KEY_KEY_PROTECTION
+)
+
+/** Removes only identity keys; draft and relays stay untouched. */
+internal fun clearIdentityKeys(prefs: MutablePreferences) {
+    identityPreferenceKeys().forEach { prefs.remove(it) }
+}
+
 class Preferences(private val context: Context) {
 
     companion object {
@@ -57,6 +75,11 @@ class Preferences(private val context: Context) {
     }
     suspend fun clearAll() {
         context.dataStore.edit { it.clear() }
+    }
+
+    /** Clear the stored identity while keeping the draft and relay configuration. */
+    suspend fun clearIdentityOnly() {
+        context.dataStore.edit { prefs -> clearIdentityKeys(prefs) }
     }
     suspend fun clearDraft() = context.dataStore.edit { it[KEY_DRAFT] = "" }
 
