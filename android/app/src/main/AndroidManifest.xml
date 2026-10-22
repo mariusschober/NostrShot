@@ -12,8 +12,8 @@
     </queries>
 
     <application
-        android:allowBackup="true"
-        android:fullBackupContent="@xml/backup_rules"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@drawable/ic_edit"
         android:roundIcon="@drawable/ic_edit"
