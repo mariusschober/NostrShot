@@ -50,6 +50,8 @@ fun ComposerScreen(
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val publishedNote = state.publishedNote
+    val noteLinkCopiedText = stringResource(R.string.note_link_copied)
+    val noAppForLinkText = stringResource(R.string.no_app_for_link)
     val infinite = rememberInfiniteTransition(label = "cursor")
     val cursorAlpha by infinite.animateFloat(
         initialValue = 1f, targetValue = 0.55f,
@@ -241,13 +243,13 @@ fun ComposerScreen(
                                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                             TextButton(onClick = {
                                                 clipboard.setText(AnnotatedString(publishedNote.nevent))
-                                                Toast.makeText(context, context.getString(R.string.note_link_copied), Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, noteLinkCopiedText, Toast.LENGTH_SHORT).show()
                                             }) { Text(stringResource(R.string.action_copy_link)) }
                                             TextButton(onClick = {
                                                 try {
                                                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(publishedNote.url)))
                                                 } catch (_: Exception) {
-                                                    Toast.makeText(context, context.getString(R.string.no_app_for_link), Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, noAppForLinkText, Toast.LENGTH_SHORT).show()
                                                 }
                                             }) { Text(stringResource(R.string.action_open)) }
                                             TextButton(onClick = onDone) { Text(stringResource(R.string.action_done)) }

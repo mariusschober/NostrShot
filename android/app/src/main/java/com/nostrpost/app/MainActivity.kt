@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
@@ -207,6 +208,12 @@ class MainActivity : ComponentActivity() {
         var signerLabels by remember { mutableStateOf(emptyList<String>()) }
         val context = LocalContext.current
         val lifecycleOwner = LocalLifecycleOwner.current
+        val msgSettingsReset = stringResource(R.string.error_settings_reset)
+        val msgNoSignerApp = stringResource(R.string.toast_no_signer_app)
+        val msgKeyImported = stringResource(R.string.toast_key_imported)
+        val msgIdentityCreated = stringResource(R.string.toast_identity_created)
+        val msgCopiedNpub = stringResource(R.string.toast_copied_npub)
+        val msgKeyRemoved = stringResource(R.string.toast_key_removed)
 
         // Re-query installed signers whenever Setup is visible again (e.g. the user installed a
         // signer in the browser and came back). Queries are off the main thread.
@@ -248,7 +255,7 @@ class MainActivity : ComponentActivity() {
             Preferences.preferencesResetEvents.collect {
                 Toast.makeText(
                     context,
-                    context.getString(R.string.error_settings_reset),
+                    msgSettingsReset,
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -270,7 +277,7 @@ class MainActivity : ComponentActivity() {
                         try {
                             getPubKeyLauncher.launch(intent)
                         } catch (e: Exception) {
-                            Toast.makeText(context, context.getString(R.string.toast_no_signer_app), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, msgNoSignerApp, Toast.LENGTH_SHORT).show()
                         }
                     },
                     onUseLocal = { nav = "import" },
@@ -325,7 +332,7 @@ class MainActivity : ComponentActivity() {
                                 try {
                                     signerRepo.storeLocalIdentity(pending.secret, pending.pubkeyHex)
                                     pendingImportRaw?.let { clearClipboardIfMatches(it) }
-                                    Toast.makeText(context, context.getString(R.string.toast_key_imported), Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, msgKeyImported, Toast.LENGTH_SHORT).show()
                                     nav = "composer"
                                 } catch (e: Exception) {
                                     importError = e.message ?: "Import failed"
@@ -352,7 +359,7 @@ class MainActivity : ComponentActivity() {
                         lifecycleScope.launch {
                             try {
                                 signerRepo.storeLocalIdentity(secret, pubkeyHex)
-                                Toast.makeText(context, context.getString(R.string.toast_identity_created), Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, msgIdentityCreated, Toast.LENGTH_SHORT).show()
                                 nav = "composer"
                             } catch (e: Exception) {
                                 importError = e.message ?: "Could not create identity"
@@ -395,7 +402,7 @@ class MainActivity : ComponentActivity() {
                     relays = relays,
                     onCopyNpub = { npub ->
                         clipboard.setText(AnnotatedString(npub))
-                        Toast.makeText(context, context.getString(R.string.toast_copied_npub), Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, msgCopiedNpub, Toast.LENGTH_SHORT).show()
                     },
                     onChangeSigner = {
                         lifecycleScope.launch {
@@ -407,7 +414,7 @@ class MainActivity : ComponentActivity() {
                         lifecycleScope.launch {
                             signerRepo.clearIdentity()
                             nav = "setup"
-                            Toast.makeText(context, context.getString(R.string.toast_key_removed), Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, msgKeyRemoved, Toast.LENGTH_SHORT).show()
                         }
                     },
                     onAddRelay = { url ->

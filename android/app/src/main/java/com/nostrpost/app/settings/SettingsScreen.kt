@@ -54,6 +54,9 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var backgroundCheck by remember { mutableStateOf<String?>(null) }
     var isChecking by remember { mutableStateOf(false) }
+    val oneTapReadyText = stringResource(R.string.settings_one_tap_ready)
+    val oneTapPinText = stringResource(R.string.settings_one_tap_pin)
+    val noSignerText = stringResource(R.string.settings_no_signer_configured)
 
     val npub = remember(pubkeyHex) {
         try { if (pubkeyHex != null) Bech32.toNpub(pubkeyHex) else null } catch (_: Exception) { null }
@@ -117,14 +120,11 @@ fun SettingsScreen(
                                         val ok = withContext(Dispatchers.IO) {
                                             Nip55.isBackgroundAvailable(context, pkg, hex)
                                         }
-                                        backgroundCheck = context.getString(
-                                            if (ok) R.string.settings_one_tap_ready
-                                            else R.string.settings_one_tap_pin
-                                        )
+                                        backgroundCheck = if (ok) oneTapReadyText else oneTapPinText
                                         isChecking = false
                                     }
                                 } else {
-                                    backgroundCheck = context.getString(R.string.settings_no_signer_configured)
+                                    backgroundCheck = noSignerText
                                     isChecking = false
                                 }
                             },
