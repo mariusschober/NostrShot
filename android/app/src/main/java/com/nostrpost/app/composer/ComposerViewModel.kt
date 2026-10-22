@@ -13,11 +13,23 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+enum class ComposerErrorAction {
+    /** Transient publish failure: show Retry. */
+    RETRY,
+
+    /** Signing/configuration problem: send the user to Settings. */
+    OPEN_SETTINGS,
+
+    /** Terminal/self-explanatory message: only allow dismissing. */
+    DISMISS
+}
+
 data class ComposerState(
     val content: String = "",
     val isPublishing: Boolean = false,
     val showSuccess: Boolean = false,
     val errorMessage: String? = null,
+    val errorAction: ComposerErrorAction = ComposerErrorAction.DISMISS,
     val isSetup: Boolean = false,
     val pubkey: String? = null,
     val relays: List<String> = emptyList()
@@ -98,7 +110,10 @@ class ComposerViewModel(
                             _state.value = _state.value.copy(isPublishing = false)
                             val intent = signerRepo.buildSignIntent(content)
                             if (intent == null) {
-                                _state.value = _state.value.copy(errorMessage = "Signer unavailable. Choose another signing method in Settings.")
+                                _state.value = _state.value.copy(
+                                    errorMessage = "Signer unavailable. Choose another signing method in Settings.",
+                                    errorAction = ComposerErrorAction.OPEN_SETTINGS
+                                )
                                 pendingPublishContent = null
                             } else {
                                 pendingPublishContent = content
@@ -109,13 +124,25 @@ class ComposerViewModel(
                             handlePublishRelay(bgResult.event)
                         }
                         bgResult is SignerRepository.SignOutcome.Cancelled -> {
-                            _state.value = _state.value.copy(isPublishing = false, errorMessage = "Signing cancelled. If Amber still asks PIN, go to Settings → Test one-tap → Fix.")
+                            _state.value = _state.value.copy(
+                                isPublishing = false,
+                                errorMessage = "Signing cancelled. If your signer still asks for a PIN, open Settings → Test one-tap → Fix.",
+                                errorAction = ComposerErrorAction.OPEN_SETTINGS
+                            )
                         }
                         bgResult is SignerRepository.SignOutcome.SignerUnavailable -> {
-                            _state.value = _state.value.copy(isPublishing = false, errorMessage = "Signer unavailable. Reinstall or change signer.")
+                            _state.value = _state.value.copy(
+                                isPublishing = false,
+                                errorMessage = "Signer unavailable. Reinstall it or change signer in Settings.",
+                                errorAction = ComposerErrorAction.OPEN_SETTINGS
+                            )
                         }
                         bgResult is SignerRepository.SignOutcome.Error -> {
-                            _state.value = _state.value.copy(isPublishing = false, errorMessage = bgResult.message + " — Settings → Test one-tap")
+                            _state.value = _state.value.copy(
+                                isPublishing = false,
+                                errorMessage = bgResult.message + " — open Settings → Test one-tap.",
+                                errorAction = ComposerErrorAction.OPEN_SETTINGS
+                            )
                         }
                     }
                 }
@@ -123,12 +150,24 @@ class ComposerViewModel(
                     val result = signerRepo.signLocally(content)
                     when (result) {
                         is SignerRepository.SignOutcome.Signed -> handlePublishRelay(result.event)
-                        is SignerRepository.SignOutcome.Error -> _state.value = _state.value.copy(isPublishing = false, errorMessage = result.message)
-                        else -> _state.value = _state.value.copy(isPublishing = false, errorMessage = "Unable to sign.")
+                        is SignerRepository.SignOutcome.Error -> _state.value = _state.value.copy(
+                            isPublishing = false,
+                            errorMessage = result.message,
+                            errorAction = ComposerErrorAction.OPEN_SETTINGS
+                        )
+                        else -> _state.value = _state.value.copy(
+                            isPublishing = false,
+                            errorMessage = "Unable to sign.",
+                            errorAction = ComposerErrorAction.OPEN_SETTINGS
+                        )
                     }
                 }
                 else -> {
-                    _state.value = _state.value.copy(isPublishing = false, errorMessage = "Not set up. Go to Settings.")
+                    _state.value = _state.value.copy(
+                        isPublishing = false,
+                        errorMessage = "Not set up. Open Settings to choose a signer.",
+                        errorAction = ComposerErrorAction.OPEN_SETTINGS
+                    )
                 }
             }
         }
@@ -147,7 +186,11 @@ class ComposerViewModel(
             delay(420)
             _effect.value = ComposerEffect.CloseApp
         } else {
-            _state.value = _state.value.copy(isPublishing = false, errorMessage = result.error ?: "Couldn't publish. Your post is still here.")
+            _state.value = _state.value.copy(
+                isPublishing = false,
+                errorMessage = result.error ?: "Couldn't publish. Your post is still here.",
+                errorAction = ComposerErrorAction.RETRY
+            )
             // draft preserved (we didn't clear)
             // keep content
         }
@@ -156,7 +199,11 @@ class ComposerViewModel(
     fun onSignerActivityResult(data: Intent?, resultCode: Int, expectedContent: String) {
         viewModelScope.launch {
             if (resultCode != android.app.Activity.RESULT_OK) {
-                _state.value = _state.value.copy(isPublishing = false, errorMessage = "Signing cancelled.")
+                _state.value = _state.value.copy(
+                    isPublishing = false,
+                    errorMessage = "Signing cancelled.",
+                    errorAction = ComposerErrorAction.DISMISS
+                )
                 return@launch
             }
             val expectedPubkey = signerRepo.getStoredPubkey() ?: ""
@@ -167,18 +214,30 @@ class ComposerViewModel(
                     handlePublishRelay(outcome.event)
                 }
                 is SignerRepository.SignOutcome.Cancelled -> {
-                    _state.value = _state.value.copy(isPublishing = false, errorMessage = "Signing cancelled.")
+                    _state.value = _state.value.copy(
+                    isPublishing = false,
+                    errorMessage = "Signing cancelled.",
+                    errorAction = ComposerErrorAction.DISMISS
+                )
                 }
                 is SignerRepository.SignOutcome.Error -> {
-                    _state.value = _state.value.copy(isPublishing = false, errorMessage = outcome.message)
+                    _state.value = _state.value.copy(
+                        isPublishing = false,
+                        errorMessage = outcome.message,
+                        errorAction = ComposerErrorAction.OPEN_SETTINGS
+                    )
                 }
-                else -> _state.value = _state.value.copy(isPublishing = false, errorMessage = "Signing failed")
+                else -> _state.value = _state.value.copy(
+                    isPublishing = false,
+                    errorMessage = "Signing failed",
+                    errorAction = ComposerErrorAction.OPEN_SETTINGS
+                )
             }
         }
     }
 
     fun onRetry() {
-        _state.value = _state.value.copy(errorMessage = null)
+        _state.value = _state.value.copy(errorMessage = null, errorAction = ComposerErrorAction.DISMISS)
         onPublishClicked()
     }
 

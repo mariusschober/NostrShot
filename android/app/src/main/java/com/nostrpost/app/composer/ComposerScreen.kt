@@ -31,7 +31,8 @@ fun ComposerScreen(
     onPublish: () -> Unit,
     onSettingsClick: () -> Unit,
     onRetry: () -> Unit = onPublish,
-    onDismissError: () -> Unit = {}
+    onDismissError: () -> Unit = {},
+    onOpenSettingsFromError: () -> Unit = onSettingsClick
 ) {
     val focusRequester = remember { FocusRequester() }
     val view = LocalView.current
@@ -152,21 +153,31 @@ fun ComposerScreen(
                         shape = MaterialTheme.shapes.medium,
                         modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
                             Text(
                                 text = state.errorMessage ?: "",
                                 color = MaterialTheme.colorScheme.onErrorContainer,
                                 style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.fillMaxWidth()
                             )
-                            if (state.errorMessage?.contains("publish", true) == true ||
-                                state.errorMessage?.contains("offline", true) == true) {
-                                TextButton(onClick = { tick(); onRetry() }) { Text("Retry") }
-                            } else {
-                                TextButton(onClick = { onDismissError() }) { Text("Dismiss") }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                when (state.errorAction) {
+                                    ComposerErrorAction.RETRY -> {
+                                        TextButton(onClick = { tick(); onRetry() }) { Text("Retry") }
+                                        TextButton(onClick = onDismissError) { Text("Dismiss") }
+                                    }
+                                    ComposerErrorAction.OPEN_SETTINGS -> {
+                                        TextButton(onClick = onOpenSettingsFromError) { Text("Settings") }
+                                        TextButton(onClick = onDismissError) { Text("Dismiss") }
+                                    }
+                                    ComposerErrorAction.DISMISS -> {
+                                        TextButton(onClick = onDismissError) { Text("Dismiss") }
+                                    }
+                                }
                             }
                         }
                     }

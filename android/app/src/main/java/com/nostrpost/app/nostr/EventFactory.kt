@@ -21,16 +21,19 @@ data class SignedEvent(
     val content: String,
     val sig: String
 ) {
+    /** NIP-01 event JSON. Built by hand so serialization is deterministic and dependency-free. */
     fun toJson(): String {
-        val obj = JSONObject()
-        obj.put("id", id)
-        obj.put("pubkey", pubkey)
-        obj.put("created_at", createdAt)
-        obj.put("kind", kind)
-        obj.put("tags", JSONArray(tags.map { JSONArray(it) }))
-        obj.put("content", content)
-        obj.put("sig", sig)
-        return obj.toString()
+        val sb = StringBuilder()
+        sb.append('{')
+        sb.append("\"id\":\"").append(id).append("\",")
+        sb.append("\"pubkey\":\"").append(pubkey).append("\",")
+        sb.append("\"created_at\":").append(createdAt).append(',')
+        sb.append("\"kind\":").append(kind).append(',')
+        sb.append("\"tags\":").append(EventFactory.serializeTags(tags)).append(',')
+        sb.append("\"content\":").append(EventFactory.escapeJsonString(content)).append(',')
+        sb.append("\"sig\":\"").append(sig).append('"')
+        sb.append('}')
+        return sb.toString()
     }
 
     fun toEventArrayJson(): String = toJson()
@@ -69,7 +72,7 @@ object EventFactory {
         return sb.toString()
     }
 
-    private fun serializeTags(tags: List<List<String>>): String {
+    internal fun serializeTags(tags: List<List<String>>): String {
         val sb = StringBuilder()
         sb.append('[')
         for (i in tags.indices) {
@@ -86,7 +89,7 @@ object EventFactory {
         return sb.toString()
     }
 
-    private fun escapeJsonString(s: String): String {
+    internal fun escapeJsonString(s: String): String {
         val sb = StringBuilder(s.length + 2)
         sb.append('"')
         for (c in s) {

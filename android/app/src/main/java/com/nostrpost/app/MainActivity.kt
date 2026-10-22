@@ -343,7 +343,8 @@ class MainActivity : ComponentActivity() {
                     onPublish = { viewModel.onPublishClicked() },
                     onSettingsClick = { nav = "settings" },
                     onRetry = { viewModel.onRetry() },
-                    onDismissError = { viewModel.dismissError() }
+                    onDismissError = { viewModel.dismissError() },
+                    onOpenSettingsFromError = { nav = "settings" }
                 )
                 // If setup incomplete but we somehow reached composer, redirect
                 LaunchedEffect(composeState.isSetup) {
