@@ -3,61 +3,341 @@ package com.nostrpost.app.security
 import android.content.Context
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
 import android.util.Log
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.KeyStore
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Wraps Nostr private key (32 bytes) with AES/GCM/NoPadding key stored in AndroidKeyStore.
- * Ciphertext stored as file `nostr_secret.enc` = iv(12) || ciphertext+tag(32+16).
+ * Wraps the Nostr private key (32 bytes) with an AES/GCM/NoPadding key stored in AndroidKeyStore.
+ * Ciphertext is stored as `nostr_secret.enc` = iv(12) || ciphertext+tag(32+16).
  *
- * StrongBox attempted first, fallback to TEE.
+ * StrongBox is attempted first, with a TEE fallback.
+ *
+ * Invariant: reading an existing secret never creates, replaces or deletes the wrapping key.
+ * If the key is missing or invalid the store raises [SecretUnavailableException] and the UI must
+ * ask the user to re-import their nsec. Only [clearSecret] (an explicit "remove key") deletes it.
  */
-class AndroidKeystoreSecretStore(private val context: Context) : SecretStore {
+class AndroidKeystoreSecretStore internal constructor(
+    private val keyProvider: WrappingKeyProvider,
+    private val secretFile: File
+) : SecretStore {
+
+    constructor(context: Context) : this(
+        AndroidWrappingKeyProvider(context),
+        File(context.filesDir, FILE_NAME)
+    )
 
     companion object {
         private const val TAG = "KeystoreSecret"
-        private const val ANDROID_KEYSTORE = "AndroidKeyStore"
-        private const val ALIAS = "nostr_wrap_key"
-        private const val FILE_NAME = "nostr_secret.enc"
+        internal const val FILE_NAME = "nostr_secret.enc"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val GCM_TAG_BITS = 128
         private const val IV_BYTES = 12
+
+        const val REIMPORT_MESSAGE =
+            "Local key unavailable — the Android Keystore key is gone or invalid. Re-import your nsec."
+    }
+
+    override suspend fun hasSecret(): Boolean {
+        return try {
+            secretFile.exists() && secretFile.length() > IV_BYTES
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    override suspend fun storeSecret(privKey32: ByteArray, protectionLevelOut: ((String) -> Unit)?) {
+        require(privKey32.size == 32) { "Private key must be 32 bytes" }
+        val (key, level) = try {
+            keyProvider.getOrCreateKey()
+        } catch (e: SecretUnavailableException) {
+            throw e
+        } catch (e: Exception) {
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.IO,
+                "Could not create the Android Keystore wrapping key.",
+                e
+            )
+        }
+
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, key)
+        val iv = cipher.iv
+        require(iv.size == IV_BYTES) { "Unexpected IV size ${iv.size}" }
+        val ciphertext = cipher.doFinal(privKey32) // includes GCM tag
+        val out = ByteArray(iv.size + ciphertext.size)
+        iv.copyInto(out, 0)
+        ciphertext.copyInto(out, iv.size)
+        try {
+            writeAtomically(out)
+        } finally {
+            ciphertext.fill(0)
+            out.fill(0)
+        }
+        protectionLevelOut?.invoke(level)
+    }
+
+    /** Write to a sibling temp file, fsync it, then atomically replace the previous ciphertext. */
+    private fun writeAtomically(bytes: ByteArray) {
+        val dir = secretFile.parentFile ?: throw SecretUnavailableException(
+            SecretUnavailableException.Reason.IO,
+            "Secret directory unavailable."
+        )
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.IO,
+                "Secret directory unavailable."
+            )
+        }
+        val tmp = File(dir, "${secretFile.name}.tmp")
+        try {
+            FileOutputStream(tmp).use { fos ->
+                fos.write(bytes)
+                fos.flush()
+                fos.fd.sync()
+            }
+            try {
+                Files.move(
+                    tmp.toPath(),
+                    secretFile.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE
+                )
+            } catch (_: Exception) {
+                // Some filesystems do not support atomic moves; renameTo still replaces in place.
+                if (!tmp.renameTo(secretFile)) {
+                    throw SecretUnavailableException(
+                        SecretUnavailableException.Reason.IO,
+                        "Could not store the encrypted key."
+                    )
+                }
+            }
+        } catch (e: SecretUnavailableException) {
+            throw e
+        } catch (e: Exception) {
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.IO,
+                "Could not store the encrypted key.",
+                e
+            )
+        } finally {
+            try { if (tmp.exists()) tmp.delete() } catch (_: Exception) {}
+        }
+    }
+
+    override suspend fun loadSecret(): ByteArray {
+        if (!secretFile.exists()) {
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.KEY_MISSING,
+                REIMPORT_MESSAGE
+            )
+        }
+        val all = try {
+            secretFile.readBytes()
+        } catch (e: Exception) {
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.IO,
+                "Could not read the encrypted key.",
+                e
+            )
+        }
+        if (all.size <= IV_BYTES + GCM_TAG_BITS / 8) {
+            all.fill(0)
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.CORRUPT,
+                REIMPORT_MESSAGE
+            )
+        }
+        val iv = all.copyOfRange(0, IV_BYTES)
+        val ciphertext = all.copyOfRange(IV_BYTES, all.size)
+
+        val key = try {
+            keyProvider.getExistingKey()
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.KEY_INVALIDATED,
+                REIMPORT_MESSAGE,
+                e
+            )
+        } catch (e: SecretUnavailableException) {
+            throw e
+        } catch (e: Exception) {
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.KEY_MISSING,
+                REIMPORT_MESSAGE,
+                e
+            )
+        } ?: throw SecretUnavailableException(
+            SecretUnavailableException.Reason.KEY_MISSING,
+            REIMPORT_MESSAGE
+        )
+
+        return try {
+            val cipher = Cipher.getInstance(TRANSFORMATION)
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
+            cipher.doFinal(ciphertext)
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.KEY_INVALIDATED,
+                REIMPORT_MESSAGE,
+                e
+            )
+        } catch (e: AEADBadTagException) {
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.CORRUPT,
+                REIMPORT_MESSAGE,
+                e
+            )
+        } catch (e: Exception) {
+            throw SecretUnavailableException(
+                SecretUnavailableException.Reason.CORRUPT,
+                REIMPORT_MESSAGE,
+                e
+            )
+        } finally {
+            all.fill(0)
+        }
+    }
+
+    override suspend fun clearSecret() {
+        if (secretFile.exists()) {
+            try {
+                secretFile.delete()
+            } catch (_: Exception) {
+                try {
+                    secretFile.writeBytes(ByteArray(0))
+                    secretFile.delete()
+                } catch (_: Exception) {}
+            }
+        }
+        // Explicit removal is the only path allowed to delete the wrapping key.
+        try {
+            keyProvider.deleteKey()
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to delete keystore entry: ${e.message}")
+        }
+    }
+
+    override suspend fun getProtectionLevel(): String? {
+        return try {
+            val key = keyProvider.peekKey() ?: return null
+            keystoreProtectionLevelOf(key)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+}
+
+/** Maps a wrapping key to the user-visible protection level, without ever creating a key. */
+internal fun keystoreProtectionLevelOf(key: SecretKey): String {
+    return try {
+        val factory = javax.crypto.SecretKeyFactory.getInstance(
+            key.algorithm,
+            AndroidWrappingKeyProvider.ANDROID_KEYSTORE
+        )
+        val info = factory.getKeySpec(
+            key,
+            android.security.keystore.KeyInfo::class.java
+        ) as android.security.keystore.KeyInfo
+        when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                info.isInsideSecureHardware &&
+                info.securityLevel == KeyProperties.SECURITY_LEVEL_STRONGBOX -> "StrongBox"
+            info.isInsideSecureHardware -> "Hardware-backed"
+            else -> "Software"
+        }
+    } catch (_: Exception) {
+        "Unknown"
+    }
+}
+
+/**
+ * Abstraction over the AndroidKeyStore wrapping key, so the read/create/delete invariants can be
+ * unit-tested with a fake provider (the real AndroidKeyStore is not available on the JVM).
+ */
+internal interface WrappingKeyProvider {
+    /** Returns the existing key, or null when no key is stored. Never creates one. */
+    fun getExistingKey(): SecretKey?
+
+    /** Returns the existing key without surfacing errors. Never creates one. */
+    fun peekKey(): SecretKey?
+
+    /** Returns the existing key, or creates one only when none exists. */
+    fun getOrCreateKey(): Pair<SecretKey, String>
+
+    fun deleteKey()
+}
+
+internal class AndroidWrappingKeyProvider(private val context: Context) : WrappingKeyProvider {
+
+    companion object {
+        const val ANDROID_KEYSTORE = "AndroidKeyStore"
+        private const val TAG = "KeystoreKey"
+        private const val ALIAS = "nostr_wrap_key"
     }
 
     private val keyStore: KeyStore by lazy {
         KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
     }
 
-    private fun getOrCreateKey(): Pair<SecretKey, String> {
-        if (keyStore.containsAlias(ALIAS)) {
-            try {
-                val key = keyStore.getKey(ALIAS, null) as SecretKey
-                return Pair(key, "unknown")
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to get existing key, recreating: ${e.message}")
-                try { keyStore.deleteEntry(ALIAS) } catch (_: Exception) {}
-            }
+    override fun getExistingKey(): SecretKey? {
+        if (!keyStore.containsAlias(ALIAS)) return null
+        return keyStore.getKey(ALIAS, null) as? SecretKey
+    }
+
+    override fun peekKey(): SecretKey? = try {
+        getExistingKey()
+    } catch (_: Exception) {
+        null
+    }
+
+    override fun getOrCreateKey(): Pair<SecretKey, String> {
+        val existing = getExistingKey()
+        if (existing != null) {
+            return Pair(existing, keystoreProtectionLevelOf(existing))
         }
-        // Check StrongBox feature
+        // Only create when the alias truly does not exist. A failed read above propagates and
+        // must never be "fixed" by deleting an existing key.
+        if (keyStore.containsAlias(ALIAS)) {
+            val key = keyStore.getKey(ALIAS, null) as? SecretKey
+                ?: throw SecretUnavailableException(
+                    SecretUnavailableException.Reason.KEY_MISSING,
+                    AndroidKeystoreSecretStore.REIMPORT_MESSAGE
+                )
+            return Pair(key, keystoreProtectionLevelOf(key))
+        }
+        return createKey()
+    }
+
+    private fun createKey(): Pair<SecretKey, String> {
         val hasStrongBox = try {
-            context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_STRONGBOX_KEYSTORE)
-        } catch (_: Exception) { false }
+            context.packageManager.hasSystemFeature(
+                android.content.pm.PackageManager.FEATURE_STRONGBOX_KEYSTORE
+            )
+        } catch (_: Exception) {
+            false
+        }
         var lastException: Exception? = null
-        val attempts = mutableListOf<Pair<Boolean,String>>()
+        val attempts = mutableListOf<Pair<Boolean, String>>()
         if (hasStrongBox) attempts.add(Pair(true, "StrongBox"))
-        attempts.add(Pair(false, "Hardware"))
+        attempts.add(Pair(false, "Hardware-backed"))
         for ((useStrongBox, label) in attempts) {
             try {
                 val key = generateKey(useStrongBox)
                 Log.i(TAG, "Created wrapping key with $label (hasStrongBox=$hasStrongBox)")
-                return Pair(key, label)
+                return Pair(key, keystoreProtectionLevelOf(key))
             } catch (e: StrongBoxUnavailableException) {
                 Log.w(TAG, "StrongBox unavailable, fallback: ${e.message}")
                 lastException = e
@@ -65,23 +345,31 @@ class AndroidKeystoreSecretStore(private val context: Context) : SecretStore {
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to create key with $label: ${e.message}", e)
                 lastException = e
-                // clean up alias if partially created
-                try { if (keyStore.containsAlias(ALIAS)) keyStore.deleteEntry(ALIAS) } catch (_: Exception) {}
+                // Only clean up a partially-created key when this call created the alias.
+                try {
+                    if (keyStore.containsAlias(ALIAS)) keyStore.deleteEntry(ALIAS)
+                } catch (_: Exception) {}
                 if (useStrongBox) continue else throw e
             }
         }
-        throw lastException ?: IllegalStateException("Unable to create wrapping key")
+        throw SecretUnavailableException(
+            SecretUnavailableException.Reason.KEY_MISSING,
+            "Could not create a wrapping key.",
+            lastException
+        )
     }
 
     private fun generateKey(useStrongBox: Boolean): SecretKey {
         val keyGen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-        val builder = KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+        val builder = KeyGenParameterSpec.Builder(
+            ALIAS,
+            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+        )
             .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
             .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
             .setRandomizedEncryptionRequired(true)
             .setKeySize(256)
-            // No user authentication to keep flow fast (device-unlocked sufficient). StrongBox/TEE still protects at rest.
-            // If biometric per-sign is desired later, we could set setUserAuthenticationRequired(true)
+            // No user authentication to keep the flow fast (device-unlocked sufficient).
             .setUserAuthenticationRequired(false)
 
         if (useStrongBox) {
@@ -91,90 +379,11 @@ class AndroidKeystoreSecretStore(private val context: Context) : SecretStore {
                 throw StrongBoxUnavailableException("StrongBox requires API 28+", null)
             }
         }
-
-        // Invalidation on new biometric enrollment not needed since no auth required; omit.
-
         keyGen.init(builder.build())
         return keyGen.generateKey()
     }
 
-    private fun getKey(): SecretKey {
-        if (!keyStore.containsAlias(ALIAS)) {
-            val (k, _) = getOrCreateKey()
-            return k
-        }
-        return keyStore.getKey(ALIAS, null) as SecretKey
-    }
-
-    override suspend fun hasSecret(): Boolean {
-        val f = File(context.filesDir, FILE_NAME)
-        return f.exists() && f.length() > IV_BYTES
-    }
-
-    override suspend fun storeSecret(privKey32: ByteArray, protectionLevelOut: ((String) -> Unit)?) {
-        require(privKey32.size == 32)
-        val (key, level) = try {
-            getOrCreateKey()
-        } catch (e: Exception) {
-            // If key already exists, use existing
-            Pair(getKey(), "Hardware")
-        }
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, key)
-        val iv = cipher.iv // 12 bytes
-        require(iv.size == IV_BYTES) { "Unexpected IV size ${iv.size}" }
-        val ciphertext = cipher.doFinal(privKey32) // includes GCM tag
-        val out = ByteArray(iv.size + ciphertext.size)
-        iv.copyInto(out, 0)
-        ciphertext.copyInto(out, iv.size)
-        val file = File(context.filesDir, FILE_NAME)
-        file.writeBytes(out)
-        // Ensure not exposed: private filesDir is already private (MODE_PRIVATE)
-        // Store protection level via prefs optionally
-        protectionLevelOut?.invoke(level)
-        // Clear input? caller manages
-    }
-
-    override suspend fun loadSecret(): ByteArray {
-        val file = File(context.filesDir, FILE_NAME)
-        require(file.exists()) { "No secret stored" }
-        val all = file.readBytes()
-        require(all.size > IV_BYTES + 16) { "Corrupted secret file" }
-        val iv = all.copyOfRange(0, IV_BYTES)
-        val ciphertext = all.copyOfRange(IV_BYTES, all.size)
-        val key = getKey()
-        val cipher = Cipher.getInstance(TRANSFORMATION)
-        val spec = GCMParameterSpec(GCM_TAG_BITS, iv)
-        cipher.init(Cipher.DECRYPT_MODE, key, spec)
-        return cipher.doFinal(ciphertext)
-    }
-
-    override suspend fun clearSecret() {
-        val file = File(context.filesDir, FILE_NAME)
-        if (file.exists()) {
-            // Overwrite before delete if possible? Simple delete for now
-            try { file.delete() } catch (_: Exception) { file.writeBytes(ByteArray(0)); file.delete() }
-        }
-        // Optionally delete key from keystore
-        try {
-            if (keyStore.containsAlias(ALIAS)) keyStore.deleteEntry(ALIAS)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to delete keystore entry: ${e.message}")
-        }
-    }
-
-    override suspend fun getProtectionLevel(): String? {
-        // We do not query keystore for hardware backing directly; infer via KeyInfo
-        return try {
-            val key = keyStore.getKey(ALIAS, null) as? SecretKey ?: return null
-            // Use KeyFactory? For AES we can try to get KeyInfo via SecretKeyFactory
-            val factory = javax.crypto.SecretKeyFactory.getInstance(key.algorithm, ANDROID_KEYSTORE)
-            val info = factory.getKeySpec(key, android.security.keystore.KeyInfo::class.java) as android.security.keystore.KeyInfo
-            when {
-                Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && info.isInsideSecureHardware && info.securityLevel == android.security.keystore.KeyProperties.SECURITY_LEVEL_STRONGBOX -> "StrongBox"
-                info.isInsideSecureHardware -> "Hardware-backed"
-                else -> "Software"
-            }
-        } catch (_: Exception) { null }
+    override fun deleteKey() {
+        if (keyStore.containsAlias(ALIAS)) keyStore.deleteEntry(ALIAS)
     }
 }

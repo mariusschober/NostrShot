@@ -85,6 +85,11 @@ class SignerRepository(
             } finally {
                 privBytes.fill(0)
             }
+        } catch (e: com.nostrpost.app.security.SecretUnavailableException) {
+            Log.w("SignerRepo", "Local key unavailable: ${e.reason}")
+            SignOutcome.Error(
+                e.message ?: com.nostrpost.app.security.AndroidKeystoreSecretStore.REIMPORT_MESSAGE
+            )
         } catch (e: Exception) {
             Log.e("SignerRepo", "Local sign error", e)
             SignOutcome.Error(e.message ?: "Local signing failed")
