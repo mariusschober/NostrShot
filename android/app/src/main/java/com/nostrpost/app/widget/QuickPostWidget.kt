@@ -56,7 +56,7 @@ class QuickPostWidget : GlanceAppWidget() {
                 .fillMaxSize()
                 .background(ColorProvider(background))
                 .clickable(actionStartActivity(intent))
-                .semantics { contentDescription = "New Nostr post" }
+                .semantics { contentDescription = ctx.getString(com.nostrpost.app.R.string.cd_new_post) }
                 .padding(8.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -75,7 +75,7 @@ class QuickPostWidget : GlanceAppWidget() {
                 )
                 Spacer(modifier = GlanceModifier.height(1.dp))
                 Text(
-                    text = "Post",
+                    text = ctx.getString(com.nostrpost.app.R.string.widget_label),
                     style = TextStyle(
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,

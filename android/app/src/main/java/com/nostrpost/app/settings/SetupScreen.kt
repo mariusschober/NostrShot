@@ -9,18 +9,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.nostrpost.app.R
 import androidx.compose.ui.unit.sp
 
-/**
- * Neutral wording for the detected signer row. Never claims a specific app (e.g. Amber) is
- * installed just because some NIP-55 signer is.
- */
-internal fun signerSummary(labels: List<String>): String {
-    val label = labels.firstOrNull()?.trim().orEmpty()
-    return if (label.isEmpty()) "NIP-55 signer detected" else "NIP-55 signer detected: $label"
-}
+/** First installed signer's display label, or empty when none/unknown. */
+internal fun firstSignerLabel(labels: List<String>): String =
+    labels.firstOrNull()?.trim().orEmpty()
 
 @Composable
 fun SetupScreen(
@@ -31,6 +28,7 @@ fun SetupScreen(
     onCreateNew: () -> Unit,
     onInstallAmber: () -> Unit
 ) {
+    val signerLabel = firstSignerLabel(signerLabels)
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -42,13 +40,13 @@ fun SetupScreen(
     ) {
         Spacer(Modifier.height(16.dp))
         Text(
-            text = "Sign posts securely",
+            text = stringResource(R.string.setup_title),
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(16.dp))
         Text(
-            text = "Keep your Nostr private key separate from this app whenever possible.",
+            text = stringResource(R.string.setup_intro),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -61,7 +59,7 @@ fun SetupScreen(
         ) {
             Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Recommended",
+                    text = stringResource(R.string.setup_recommended),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                 )
@@ -71,30 +69,38 @@ fun SetupScreen(
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     enabled = hasSigner
                 ) {
-                    Text(if (hasSigner) "Use Android signer" else "No signer found", fontSize = 16.sp)
+                    Text(
+                        if (hasSigner) stringResource(R.string.setup_use_signer)
+                        else stringResource(R.string.setup_no_signer),
+                        fontSize = 16.sp
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 if (hasSigner) {
                     Text(
-                        text = signerSummary(signerLabels),
+                        text = if (signerLabel.isEmpty()) {
+                            stringResource(R.string.setup_signer_detected_generic)
+                        } else {
+                            stringResource(R.string.setup_signer_detected, signerLabel)
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     )
                 } else {
                     Text(
-                        text = "Install a NIP-55 signer app (for example Amber) to keep your key isolated.",
+                        text = stringResource(R.string.setup_install_signer),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
                         textAlign = TextAlign.Center
                     )
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(onClick = onInstallAmber, modifier = Modifier.fillMaxWidth()) {
-                        Text("Learn about NIP-55 signers")
+                        Text(stringResource(R.string.setup_learn_signers))
                     }
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "A signer keeps your private key outside this app. You’ll approve “sign kind-1” once.",
+                    text = stringResource(R.string.setup_signer_help),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center
@@ -107,19 +113,19 @@ fun SetupScreen(
                 ) {
                     Column(Modifier.padding(12.dp)) {
                         Text(
-                            text = "For one-tap publishing:",
+                            text = stringResource(R.string.setup_one_tap_title),
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "1. Tap “Use Android signer”\n2. In your signer app enable “Remember my choice” / “Fully trust” for kind 1\n3. Then device unlock is enough — no app PIN each time",
+                            text = stringResource(R.string.setup_one_tap_steps),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(4.dp))
                         Text(
-                            text = "If your signer still asks for a PIN, open its Settings → Security and use device unlock instead of an app PIN.",
+                            text = stringResource(R.string.setup_one_tap_pin),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                         )
@@ -131,7 +137,7 @@ fun SetupScreen(
         Spacer(Modifier.height(20.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Divider(modifier = Modifier.weight(1f))
-            Text("  OR  ", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.setup_or), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Divider(modifier = Modifier.weight(1f))
         }
         Spacer(Modifier.height(20.dp))
@@ -140,18 +146,18 @@ fun SetupScreen(
             onClick = onUseLocal,
             modifier = Modifier.fillMaxWidth().height(48.dp)
         ) {
-            Text("Store key on this device", fontSize = 15.sp)
+            Text(stringResource(R.string.setup_store_key), fontSize = 15.sp)
         }
         Spacer(Modifier.height(8.dp))
         Button(
             onClick = onCreateNew,
             modifier = Modifier.fillMaxWidth().height(48.dp)
         ) {
-            Text("Create a new identity", fontSize = 15.sp)
+            Text(stringResource(R.string.setup_create_identity), fontSize = 15.sp)
         }
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "New here? Create a key and back up the nsec when it is shown. Encrypted with Android’s hardware-backed Keystore when available. Less isolated than a dedicated signer.",
+            text = stringResource(R.string.setup_local_help),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             textAlign = TextAlign.Center

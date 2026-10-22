@@ -1,15 +1,136 @@
 <resources>
     <string name="app_name">Nostr Post</string>
+
+    <!-- Composer -->
     <string name="composer_hint">What\'s on your mind?</string>
+    <string name="composer_period_morning">Morning</string>
+    <string name="composer_period_afternoon">Afternoon</string>
+    <string name="composer_period_evening">Evening</string>
+    <string name="composer_period_night">Night</string>
+    <string name="composer_placeholder">%1$s · %2$s  —  What\'s on your mind?</string>
     <string name="action_publish">Publish</string>
+    <string name="action_publishing">Publishing…</string>
+    <string name="status_published">Published</string>
     <string name="action_retry">Retry</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_copy_link">Copy link</string>
+    <string name="action_open">Open</string>
+    <string name="action_done">Done</string>
+    <string name="action_add">Add</string>
+    <string name="action_remove">Remove</string>
+    <string name="action_back">← Back</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="note_link_copied">Note link copied</string>
+    <string name="no_app_for_link">No app to open the link</string>
     <string name="cd_settings">Settings</string>
     <string name="cd_close">Close</string>
-    <string name="widget_description">Post to Nostr</string>
+    <string name="cd_new_post">New Nostr post</string>
+
+    <!-- Setup -->
+    <string name="setup_title">Sign posts securely</string>
+    <string name="setup_intro">Keep your Nostr private key separate from this app whenever possible.</string>
+    <string name="setup_recommended">Recommended</string>
+    <string name="setup_use_signer">Use Android signer</string>
+    <string name="setup_no_signer">No signer found</string>
+    <string name="setup_signer_detected">NIP-55 signer detected: %1$s</string>
+    <string name="setup_signer_detected_generic">NIP-55 signer detected</string>
+    <string name="setup_install_signer">Install a NIP-55 signer app (for example Amber) to keep your key isolated.</string>
+    <string name="setup_learn_signers">Learn about NIP-55 signers</string>
+    <string name="setup_signer_help">A signer keeps your private key outside this app. You’ll approve “sign kind-1” once.</string>
+    <string name="setup_one_tap_title">For one-tap publishing:</string>
+    <string name="setup_one_tap_steps">1. Tap “Use Android signer”\n2. In your signer app enable “Remember my choice” / “Fully trust” for kind 1\n3. Then device unlock is enough — no app PIN each time</string>
+    <string name="setup_one_tap_pin">If your signer still asks for a PIN, open its Settings → Security and use device unlock instead of an app PIN.</string>
+    <string name="setup_or">  OR  </string>
+    <string name="setup_store_key">Store key on this device</string>
+    <string name="setup_create_identity">Create a new identity</string>
+    <string name="setup_local_help">New here? Create a key and back up the nsec when it is shown. Encrypted with Android’s hardware-backed Keystore when available. Less isolated than a dedicated signer.</string>
+
+    <!-- Import -->
+    <string name="import_title">Private key</string>
+    <string name="import_intro">Paste your nsec or 64-char hex secret. It will be encrypted with the Android Keystore.</string>
+    <string name="import_placeholder">nsec1…</string>
+    <string name="import_show">Show</string>
+    <string name="import_hide">Hide</string>
+    <string name="import_storage_note">Stored encrypted using Android Keystore (StrongBox when available). Not backed up.</string>
+    <string name="import_button">Import</string>
+    <string name="import_back">Back</string>
+
+    <!-- Confirm / create identity -->
+    <string name="confirm_title">Is this your identity?</string>
+    <string name="confirm_intro">Make sure this npub matches the key you are importing. Otherwise your posts will be published under a different identity.</string>
+    <string name="confirm_button">This is my identity</string>
+    <string name="create_backup_title">Back up your new key</string>
+    <string name="create_backup_intro">This secret key (nsec) is shown only once. Write it down or store it in a password manager. Anyone who has it can post as you; nobody can recover it for you.</string>
+    <string name="create_private_key_label">Private key (nsec)</string>
+    <string name="create_show_secret">Show secret</string>
+    <string name="create_hide_secret">Hide secret</string>
+    <string name="create_stored">I stored my key</string>
+    <string name="create_confirm_title">Confirm your identity</string>
+    <string name="create_confirm_intro">Check that this public key (npub) is the identity you will post with. It is safe to share.</string>
+    <string name="create_button">Create identity</string>
+    <string name="create_back_to_key">Back to key</string>
+
+    <!-- Settings -->
     <string name="settings_title">Settings</string>
-    <string name="signing_external">Android signer</string>
-    <string name="signing_local">Stored securely on this device</string>
-    <string name="copy_npub">Copy npub</string>
+    <string name="settings_identity">Identity</string>
+    <string name="settings_signing">Signing</string>
+    <string name="settings_android_signer">Android signer</string>
+    <string name="settings_stored_securely">Stored securely on this device</string>
+    <string name="settings_protection">Protection: %1$s</string>
+    <string name="settings_protection_unknown">Unknown</string>
+    <string name="settings_not_setup">Not set up</string>
+    <string name="settings_copy_npub">Copy npub</string>
+    <string name="settings_test_one_tap">Test one-tap</string>
+    <string name="settings_checking">Checking…</string>
+    <string name="settings_one_tap_ready">✓ One-tap ready — device unlock only</string>
+    <string name="settings_one_tap_pin">✗ Still asks PIN — tap Fix</string>
+    <string name="settings_no_signer_configured">No signer configured</string>
+    <string name="settings_fix_help">Fix: In your signer app, remove Nostr Post → reconnect → enable Remember / trust for kind 1. Then set the signer to unlock with your device instead of an app PIN.</string>
+    <string name="settings_open_signer">Open signer</string>
+    <string name="settings_change_signer">Change signer</string>
+    <string name="settings_device_unlock_help">Device unlock only: after one approval with “Remember”, publishing uses background signing — like other Nostr apps.</string>
+    <string name="settings_remove_key">Remove key</string>
+    <string name="settings_relays">Relays</string>
+    <string name="settings_relay_hint">wss://…</string>
+    <string name="settings_relay_invalid">Enter a valid wss:// relay URL</string>
+    <string name="settings_relay_duplicate">Already in the list</string>
+    <string name="settings_reset_relays">Reset defaults</string>
+    <string name="settings_about">About</string>
+    <string name="settings_about_version">Nostr Post 1.0.0 — tap → type → publish → gone.</string>
+    <string name="settings_about_body">No feed. No analytics. Local signing via NIP-55 or hardware-backed Keystore.</string>
+    <string name="settings_remove_title">Remove key?</string>
+    <string name="settings_remove_text">Your private key will be deleted from this device. Your draft and relay list are kept. You must have a backup elsewhere.</string>
+    <string name="settings_remove_confirm">Remove</string>
+    <string name="settings_change_title">Change signer?</string>
+    <string name="settings_change_text">The current identity is removed from this device. Your draft and relay list are kept. You will choose a signer or import a key next.</string>
+    <string name="settings_change_confirm">Change</string>
+    <string name="settings_relay_status_failed">failed: %1$s</string>
+    <string name="settings_relay_status_last_failed">last attempt failed: %1$s</string>
+    <string name="settings_copied_npub">Copied npub</string>
+
+    <plurals name="settings_relay_count">
+        <item quantity="one">%1$d relay — at least one OK counts as published.</item>
+        <item quantity="other">%1$d relays — at least one OK counts as published.</item>
+    </plurals>
+
+    <!-- Widget / shortcuts -->
+    <string name="widget_description">Post to Nostr</string>
+    <string name="widget_label">Post</string>
     <string name="shortcut_new_post">New post</string>
     <string name="shortcut_new_post_long">New post to Nostr</string>
+
+    <!-- MainActivity toasts -->
+    <string name="toast_signer_connected">Signer connected</string>
+    <string name="toast_signer_pubkey_failed">Failed to get public key from signer</string>
+    <string name="toast_signer_cancelled">Signer connection cancelled</string>
+    <string name="toast_signer_launch_failed">Unable to launch signer</string>
+    <string name="toast_no_signer_app">No signer app found</string>
+    <string name="toast_key_imported">Key imported securely</string>
+    <string name="toast_identity_created">New identity created</string>
+    <string name="toast_copied_npub">Copied npub</string>
+    <string name="toast_key_removed">Key removed</string>
+
+    <!-- Keystore / storage errors that reach the UI -->
+    <string name="error_settings_reset">Stored settings were reset because they could not be read</string>
 </resources>

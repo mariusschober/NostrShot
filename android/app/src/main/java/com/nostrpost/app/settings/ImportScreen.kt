@@ -10,9 +10,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nostrpost.app.R
 
 @Composable
 fun ImportScreen(
@@ -37,10 +39,10 @@ fun ImportScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Spacer(Modifier.height(8.dp))
-        Text("Private key", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.import_title), style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
         Text(
-            "Paste your nsec or 64-char hex secret. It will be encrypted with the Android Keystore.",
+            stringResource(R.string.import_intro),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -49,11 +51,16 @@ fun ImportScreen(
             value = input,
             onValueChange = { input = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("nsec1…") },
+            placeholder = { Text(stringResource(R.string.import_placeholder)) },
             visualTransformation = if (show) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             trailingIcon = {
-                TextButton(onClick = { show = !show }) { Text(if (show) "Hide" else "Show", fontSize = 12.sp) }
+                TextButton(onClick = { show = !show }) {
+                    Text(
+                        stringResource(if (show) R.string.import_hide else R.string.import_show),
+                        fontSize = 12.sp
+                    )
+                }
             },
             isError = error != null,
             singleLine = false,
@@ -65,7 +72,7 @@ fun ImportScreen(
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "Stored encrypted using Android Keystore (StrongBox when available). Not backed up.",
+            stringResource(R.string.import_storage_note),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
         )
@@ -75,11 +82,11 @@ fun ImportScreen(
             modifier = Modifier.fillMaxWidth().height(48.dp),
             enabled = isValid
         ) {
-            Text("Import")
+            Text(stringResource(R.string.import_button))
         }
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-            Text("Back")
+            Text(stringResource(R.string.import_back))
         }
         Spacer(Modifier.height(24.dp))
     }

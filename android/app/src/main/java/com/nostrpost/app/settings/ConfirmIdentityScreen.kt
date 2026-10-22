@@ -11,8 +11,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.nostrpost.app.R
 import com.nostrpost.app.nostr.Bech32
 
 /** Confirms the full npub of an imported key before it is saved and used to publish. */
@@ -35,13 +37,13 @@ fun ConfirmIdentityScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            "Is this your identity?",
+            stringResource(R.string.confirm_title),
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(12.dp))
         Text(
-            "Make sure this npub matches the key you are importing. Otherwise your posts will be published under a different identity.",
+            stringResource(R.string.confirm_intro),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -60,9 +62,11 @@ fun ConfirmIdentityScreen(
         Button(
             onClick = onConfirm,
             modifier = Modifier.fillMaxWidth().height(48.dp)
-        ) { Text("This is my identity") }
+        ) { Text(stringResource(R.string.confirm_button)) }
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Back") }
+        OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.import_back))
+        }
         Spacer(Modifier.height(24.dp))
     }
 }

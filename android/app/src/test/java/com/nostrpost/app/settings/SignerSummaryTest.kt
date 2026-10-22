@@ -9,22 +9,18 @@ class SignerSummaryTest {
 
     @Test
     fun usesActualSignerLabel() {
-        val summary = signerSummary(listOf("Nostr Signer"))
-        assertTrue(summary.contains("Nostr Signer"))
-        assertFalse(summary.contains("Amber"))
+        val label = firstSignerLabel(listOf("Nostr Signer"))
+        assertTrue(label.contains("Nostr Signer"))
+        assertFalse(label.contains("Amber"))
     }
 
     @Test
     fun neutralWhenLabelUnknown() {
-        val summary = signerSummary(emptyList())
-        assertTrue(summary.contains("NIP-55 signer detected"))
-        assertFalse(summary.contains("Amber"))
+        assertTrue(firstSignerLabel(emptyList()).isEmpty())
     }
 
     @Test
-    fun blankLabelFallsBackToNeutralText() {
-        val summary = signerSummary(listOf("  "))
-        assertTrue(summary.contains("NIP-55 signer detected"))
-        assertFalse(summary.contains(":"))
+    fun blankLabelFallsBackToEmpty() {
+        assertTrue(firstSignerLabel(listOf("  ")).isEmpty())
     }
 }

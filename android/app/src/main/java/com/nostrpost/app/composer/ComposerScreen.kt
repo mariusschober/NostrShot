@@ -57,18 +57,18 @@ fun ComposerScreen(
         label = "cursorPulse"
     )
 
-    val placeholder = remember {
-        val now = LocalTime.now()
-        val hour = now.hour
-        val prefix = when (hour) {
-            in 5..11 -> "Morning ·"
-            in 12..16 -> "Afternoon ·"
-            in 17..21 -> "Evening ·"
-            else -> "Night ·"
-        }
-        val time = now.format(DateTimeFormatter.ofPattern("HH:mm"))
-        "$prefix $time  —  What's on your mind?"
+    val now = remember { LocalTime.now() }
+    val periodLabel = when (now.hour) {
+        in 5..11 -> stringResource(R.string.composer_period_morning)
+        in 12..16 -> stringResource(R.string.composer_period_afternoon)
+        in 17..21 -> stringResource(R.string.composer_period_evening)
+        else -> stringResource(R.string.composer_period_night)
     }
+    val placeholder = stringResource(
+        R.string.composer_placeholder,
+        periodLabel,
+        now.format(DateTimeFormatter.ofPattern("HH:mm"))
+    )
 
     fun tick() { try { view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) } catch (_: Exception) {} }
     fun confirm() { try { view.performHapticFeedback(HapticFeedbackConstants.CONFIRM) } catch (_: Exception) {} }
@@ -191,15 +191,15 @@ fun ComposerScreen(
                             ) {
                                 when (state.errorAction) {
                                     ComposerErrorAction.RETRY -> {
-                                        TextButton(onClick = { tick(); onRetry() }) { Text("Retry") }
-                                        TextButton(onClick = onDismissError) { Text("Dismiss") }
+                                        TextButton(onClick = { tick(); onRetry() }) { Text(stringResource(R.string.action_retry)) }
+                                        TextButton(onClick = onDismissError) { Text(stringResource(R.string.action_dismiss)) }
                                     }
                                     ComposerErrorAction.OPEN_SETTINGS -> {
-                                        TextButton(onClick = onOpenSettingsFromError) { Text("Settings") }
-                                        TextButton(onClick = onDismissError) { Text("Dismiss") }
+                                        TextButton(onClick = onOpenSettingsFromError) { Text(stringResource(R.string.action_settings)) }
+                                        TextButton(onClick = onDismissError) { Text(stringResource(R.string.action_dismiss)) }
                                     }
                                     ComposerErrorAction.DISMISS -> {
-                                        TextButton(onClick = onDismissError) { Text("Dismiss") }
+                                        TextButton(onClick = onDismissError) { Text(stringResource(R.string.action_dismiss)) }
                                     }
                                 }
                             }
@@ -234,23 +234,23 @@ fun ComposerScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text("✓", color = MaterialTheme.colorScheme.primary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                                         Spacer(Modifier.width(6.dp))
-                                        Text("Published", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                                        Text(stringResource(R.string.status_published), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                                     }
                                     if (publishedNote != null) {
                                         Spacer(Modifier.height(4.dp))
                                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                             TextButton(onClick = {
                                                 clipboard.setText(AnnotatedString(publishedNote.nevent))
-                                                Toast.makeText(context, "Note link copied", Toast.LENGTH_SHORT).show()
-                                            }) { Text("Copy link") }
+                                                Toast.makeText(context, context.getString(R.string.note_link_copied), Toast.LENGTH_SHORT).show()
+                                            }) { Text(stringResource(R.string.action_copy_link)) }
                                             TextButton(onClick = {
                                                 try {
                                                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(publishedNote.url)))
                                                 } catch (_: Exception) {
-                                                    Toast.makeText(context, "No app to open the link", Toast.LENGTH_SHORT).show()
+                                                    Toast.makeText(context, context.getString(R.string.no_app_for_link), Toast.LENGTH_SHORT).show()
                                                 }
-                                            }) { Text("Open") }
-                                            TextButton(onClick = onDone) { Text("Done") }
+                                            }) { Text(stringResource(R.string.action_open)) }
+                                            TextButton(onClick = onDone) { Text(stringResource(R.string.action_done)) }
                                         }
                                     }
                                 }
@@ -275,9 +275,9 @@ fun ComposerScreen(
                                             color = MaterialTheme.colorScheme.onPrimary
                                         )
                                         Spacer(Modifier.width(8.dp))
-                                        Text("Publishing…")
+                                        Text(stringResource(R.string.action_publishing))
                                     } else {
-                                        Text("Publish", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(stringResource(R.string.action_publish), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                                     }
                                 }
                             }

@@ -10,8 +10,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.nostrpost.app.R
 import com.nostrpost.app.nostr.Bech32
 import com.nostrpost.app.signing.IdentityGenerator
 
@@ -47,7 +49,8 @@ fun CreateIdentityScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            if (step == 0) "Back up your new key" else "Confirm your identity",
+            if (step == 0) stringResource(R.string.create_backup_title)
+            else stringResource(R.string.create_confirm_title),
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center
         )
@@ -55,7 +58,7 @@ fun CreateIdentityScreen(
 
         if (step == 0) {
             Text(
-                "This secret key (nsec) is shown only once. Write it down or store it in a password manager. Anyone who has it can post as you; nobody can recover it for you.",
+                stringResource(R.string.create_backup_intro),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -63,7 +66,7 @@ fun CreateIdentityScreen(
             Spacer(Modifier.height(20.dp))
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Private key (nsec)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.create_private_key_label), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.height(8.dp))
                     SelectionContainer {
                         Text(
@@ -74,7 +77,12 @@ fun CreateIdentityScreen(
                     }
                     Spacer(Modifier.height(8.dp))
                     TextButton(onClick = { revealed = !revealed }) {
-                        Text(if (revealed) "Hide secret" else "Show secret")
+                        Text(
+                            stringResource(
+                                if (revealed) R.string.create_hide_secret
+                                else R.string.create_show_secret
+                            )
+                        )
                     }
                 }
             }
@@ -82,12 +90,14 @@ fun CreateIdentityScreen(
             Button(
                 onClick = { step = 1 },
                 modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) { Text("I stored my key") }
+            ) { Text(stringResource(R.string.create_stored)) }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
+            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.action_cancel))
+            }
         } else {
             Text(
-                "Check that this public key (npub) is the identity you will post with. It is safe to share.",
+                stringResource(R.string.create_confirm_intro),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -106,9 +116,11 @@ fun CreateIdentityScreen(
             Button(
                 onClick = { onCreate(generated.secret, generated.pubkeyHex) },
                 modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) { Text("Create identity") }
+            ) { Text(stringResource(R.string.create_button)) }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { step = 0 }, modifier = Modifier.fillMaxWidth()) { Text("Back to key") }
+            OutlinedButton(onClick = { step = 0 }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.create_back_to_key))
+            }
         }
         Spacer(Modifier.height(24.dp))
     }

@@ -7,6 +7,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -14,6 +16,7 @@ import androidx.compose.ui.unit.sp
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
+import com.nostrpost.app.R
 import com.nostrpost.app.nostr.Bech32
 import com.nostrpost.app.nostr.RelayConfig
 import com.nostrpost.app.nostr.RelayHealthStore
@@ -41,8 +44,8 @@ fun SettingsScreen(
     val normalizedRelayInput = RelayConfig.normalizeOrNull(addRelayText)
     val relayInputError = when {
         addRelayText.isBlank() -> null
-        normalizedRelayInput == null -> "Enter a valid wss:// relay URL"
-        RelayConfig.isDuplicate(addRelayText, relays) -> "Already in the list"
+        normalizedRelayInput == null -> stringResource(R.string.settings_relay_invalid)
+        RelayConfig.isDuplicate(addRelayText, relays) -> stringResource(R.string.settings_relay_duplicate)
         else -> null
     }
     var showRemoveConfirm by remember { mutableStateOf(false) }
@@ -63,9 +66,9 @@ fun SettingsScreen(
     ) {
         item {
             Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
+                TextButton(onClick = onBack) { Text(stringResource(R.string.action_back)) }
                 Spacer(Modifier.weight(1f))
-                Text("Settings", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
+                Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold))
                 Spacer(Modifier.weight(1f))
                 Spacer(Modifier.width(64.dp)) // balance
             }
@@ -74,25 +77,30 @@ fun SettingsScreen(
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Identity", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_identity), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
                     if (signerMode == "nip55") {
-                        Text("Signing", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        Text("Android signer", style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.settings_signing), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(R.string.settings_android_signer), style = MaterialTheme.typography.bodyLarge)
                         if (signerPackage != null) Text(signerPackage, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else if (signerMode == "local") {
-                        Text("Signing", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                        Text("Stored securely on this device", style = MaterialTheme.typography.bodyLarge)
-                        Text("Protection: ${protectionLevel ?: "Unknown"}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.settings_signing), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(R.string.settings_stored_securely), style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            stringResource(
+                                R.string.settings_protection,
+                                protectionLevel ?: stringResource(R.string.settings_protection_unknown)
+                            ),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
-                        Text("Not set up", color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.settings_not_setup), color = MaterialTheme.colorScheme.error)
                     }
                     Spacer(Modifier.height(12.dp))
                     if (npub != null) {
                         Text(truncated, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(onClick = { onCopyNpub(npub) }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Copy npub")
+                            Text(stringResource(R.string.settings_copy_npub))
                         }
                     }
                     Spacer(Modifier.height(12.dp))
@@ -109,24 +117,32 @@ fun SettingsScreen(
                                         val ok = withContext(Dispatchers.IO) {
                                             Nip55.isBackgroundAvailable(context, pkg, hex)
                                         }
-                                        backgroundCheck = if (ok) "✓ One-tap ready — device unlock only" else "✗ Still asks PIN — tap Fix"
+                                        backgroundCheck = context.getString(
+                                            if (ok) R.string.settings_one_tap_ready
+                                            else R.string.settings_one_tap_pin
+                                        )
                                         isChecking = false
                                     }
                                 } else {
-                                    backgroundCheck = "No signer configured"
+                                    backgroundCheck = context.getString(R.string.settings_no_signer_configured)
                                     isChecking = false
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(if (isChecking) "Checking…" else "Test one-tap")
+                            Text(
+                                stringResource(
+                                    if (isChecking) R.string.settings_checking
+                                    else R.string.settings_test_one_tap
+                                )
+                            )
                         }
                         if (backgroundCheck != null) {
                             Spacer(Modifier.height(6.dp))
                             Text(backgroundCheck!!, style = MaterialTheme.typography.bodySmall, color = if (backgroundCheck!!.startsWith("✓")) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
                             if (backgroundCheck!!.startsWith("✗")) {
                                 Spacer(Modifier.height(6.dp))
-                                Text("Fix: In your signer app, remove Nostr Post → reconnect → enable Remember / trust for kind 1. Then set the signer to unlock with your device instead of an app PIN.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(stringResource(R.string.settings_fix_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Spacer(Modifier.height(8.dp))
                                 OutlinedButton(
                                     onClick = {
@@ -139,18 +155,18 @@ fun SettingsScreen(
                                         }
                                     },
                                     modifier = Modifier.fillMaxWidth()
-                                ) { Text("Open signer") }
+                                ) { Text(stringResource(R.string.settings_open_signer)) }
                             }
                         }
                         Spacer(Modifier.height(8.dp))
                         OutlinedButton(onClick = { showChangeConfirm = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Change signer")
+                            Text(stringResource(R.string.settings_change_signer))
                         }
                         Spacer(Modifier.height(4.dp))
-                        Text("Device unlock only: after one approval with “Remember”, publishing uses background signing — like other Nostr apps.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.7f))
+                        Text(stringResource(R.string.settings_device_unlock_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=0.7f))
                     } else if (signerMode == "local") {
                         OutlinedButton(onClick = { showRemoveConfirm = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Remove key")
+                            Text(stringResource(R.string.settings_remove_key))
                         }
                     }
                 }
@@ -160,9 +176,11 @@ fun SettingsScreen(
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Relays", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_relays), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(4.dp))
-                    Text("${relays.size} relays — at least one OK counts as published.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        pluralStringResource(R.plurals.settings_relay_count, relays.size, relays.size),
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(12.dp))
                     relays.forEach { relay ->
                         val health = RelayHealthStore.forRelay(RelayConfig.normalize(relay))
@@ -179,7 +197,9 @@ fun SettingsScreen(
                                     )
                                 }
                             }
-                            TextButton(onClick = { onRemoveRelay(relay) }) { Text("Remove", fontSize = 12.sp) }
+                            TextButton(onClick = { onRemoveRelay(relay) }) {
+                                Text(stringResource(R.string.action_remove), fontSize = 12.sp)
+                            }
                         }
                         Divider()
                     }
@@ -187,7 +207,7 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = addRelayText,
                         onValueChange = { addRelayText = it },
-                        placeholder = { Text("wss://…") },
+                        placeholder = { Text(stringResource(R.string.settings_relay_hint)) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         isError = relayInputError != null,
@@ -202,9 +222,11 @@ fun SettingsScreen(
                             onAddRelay(v)
                             addRelayText = ""
                         }, enabled = normalizedRelayInput != null && relayInputError == null) {
-                            Text("Add")
+                            Text(stringResource(R.string.action_add))
                         }
-                        OutlinedButton(onClick = onResetRelays) { Text("Reset defaults") }
+                        OutlinedButton(onClick = onResetRelays) {
+                            Text(stringResource(R.string.settings_reset_relays))
+                        }
                     }
                 }
             }
@@ -213,10 +235,10 @@ fun SettingsScreen(
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
-                    Text("About", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
-                    Text("Nostr Post 1.0.0 — tap → type → publish → gone.", style = MaterialTheme.typography.bodyMedium)
-                    Text("No feed. No analytics. Local signing via NIP-55 or hardware-backed Keystore.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.settings_about_version), style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.settings_about_body), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Spacer(Modifier.height(32.dp))
@@ -226,28 +248,32 @@ fun SettingsScreen(
     if (showRemoveConfirm) {
         AlertDialog(
             onDismissRequest = { showRemoveConfirm = false },
-            title = { Text("Remove key?") },
-            text = { Text("Your private key will be deleted from this device. Your draft and relay list are kept. You must have a backup elsewhere.") },
+            title = { Text(stringResource(R.string.settings_remove_title)) },
+            text = { Text(stringResource(R.string.settings_remove_text)) },
             confirmButton = {
                 Button(onClick = { showRemoveConfirm = false; onRemoveKey() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) {
-                    Text("Remove")
+                    Text(stringResource(R.string.settings_remove_confirm))
                 }
             },
-            dismissButton = { TextButton(onClick = { showRemoveConfirm = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showRemoveConfirm = false }) {
+                        Text(stringResource(R.string.action_cancel))
+                    } }
         )
     }
 
     if (showChangeConfirm) {
         AlertDialog(
             onDismissRequest = { showChangeConfirm = false },
-            title = { Text("Change signer?") },
-            text = { Text("The current identity is removed from this device. Your draft and relay list are kept. You will choose a signer or import a key next.") },
+            title = { Text(stringResource(R.string.settings_change_title)) },
+            text = { Text(stringResource(R.string.settings_change_text)) },
             confirmButton = {
                 Button(onClick = { showChangeConfirm = false; onChangeSigner() }) {
-                    Text("Change")
+                    Text(stringResource(R.string.settings_change_confirm))
                 }
             },
-            dismissButton = { TextButton(onClick = { showChangeConfirm = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showChangeConfirm = false }) {
+                        Text(stringResource(R.string.action_cancel))
+                    } }
         )
     }
 }
