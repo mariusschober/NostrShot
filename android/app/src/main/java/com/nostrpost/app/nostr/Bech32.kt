@@ -73,7 +73,9 @@ object Bech32 {
         val pos = lower.lastIndexOf('1')
         require(pos >= 1) { "Invalid bech32: missing separator" }
         require(pos + 7 <= lower.length) { "Invalid bech32: too short" }
-        require(lower.length <= 90) { "Invalid bech32: too long" }
+        // NIP-19 nevent strings legitimately exceed BIP-173's 90-char limit when relay hints
+        // are included, so allow a generous bound instead of rejecting valid note links.
+        require(lower.length <= 4096) { "Invalid bech32: too long" }
         val hrp = lower.substring(0, pos)
         val dataPart = lower.substring(pos + 1)
         val data = IntArray(dataPart.length)

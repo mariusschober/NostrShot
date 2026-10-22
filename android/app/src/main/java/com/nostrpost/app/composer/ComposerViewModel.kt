@@ -24,10 +24,18 @@ enum class ComposerErrorAction {
     DISMISS
 }
 
+data class PublishedNote(
+    val eventId: String,
+    val noteId: String,
+    val nevent: String,
+    val url: String
+)
+
 data class ComposerState(
     val content: String = "",
     val isPublishing: Boolean = false,
     val showSuccess: Boolean = false,
+    val publishedNote: PublishedNote? = null,
     val errorMessage: String? = null,
     val errorAction: ComposerErrorAction = ComposerErrorAction.DISMISS,
     val isSetup: Boolean = false,
@@ -137,7 +145,7 @@ class ComposerViewModel(
         val content = _state.value.content.trim()
         android.util.Log.i("ComposerVM", "Publish clicked: contentLen=${content.length} isSetup=${_state.value.isSetup}")
         if (content.isEmpty()) return
-        if (_state.value.isPublishing) return
+        if (_state.value.isPublishing || _state.value.showSuccess) return
         viewModelScope.launch {
             android.util.Log.i("ComposerVM", "Starting publish len=${content.length}")
             _state.value = _state.value.copy(isPublishing = true, errorMessage = null)
@@ -223,11 +231,26 @@ class ComposerViewModel(
         android.util.Log.i("ComposerVM", "Publishing to relays: $relays")
         val result = relayPublisher.publish(event, relays)
         if (result.success) {
-            // clear draft
+            // Clear the draft only after a relay accepted (or already had) the event.
             prefs.clearDraft()
-            _state.value = _state.value.copy(content = "", isPublishing = false, showSuccess = true)
-            delay(420)
-            _effect.value = ComposerEffect.CloseApp
+            val nevent = com.nostrpost.app.nostr.Nip19.nevent(
+                eventIdHex = event.id,
+                relays = relays,
+                authorHex = event.pubkey,
+                kind = event.kind
+            )
+            val published = PublishedNote(
+                eventId = event.id,
+                noteId = com.nostrpost.app.nostr.Nip19.note(event.id),
+                nevent = nevent,
+                url = com.nostrpost.app.nostr.Nip19.njumpUrl(nevent)
+            )
+            _state.value = _state.value.copy(
+                content = "",
+                isPublishing = false,
+                showSuccess = true,
+                publishedNote = published
+            )
         } else {
             _state.value = _state.value.copy(
                 isPublishing = false,
@@ -280,6 +303,11 @@ class ComposerViewModel(
                 )
             }
         }
+    }
+
+    /** Explicit "Done" on the publish confirmation (also used by its auto-close timer). */
+    fun onDoneAfterPublish() {
+        if (_state.value.showSuccess) _effect.value = ComposerEffect.CloseApp
     }
 
     fun onRetry() {

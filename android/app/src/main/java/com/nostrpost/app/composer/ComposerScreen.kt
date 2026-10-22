@@ -1,6 +1,9 @@
 package com.nostrpost.app.composer
 
+import android.content.Intent
+import android.net.Uri
 import android.view.HapticFeedbackConstants
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
@@ -19,7 +22,10 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,10 +42,14 @@ fun ComposerScreen(
     onSettingsClick: () -> Unit,
     onRetry: () -> Unit = onPublish,
     onDismissError: () -> Unit = {},
-    onOpenSettingsFromError: () -> Unit = onSettingsClick
+    onOpenSettingsFromError: () -> Unit = onSettingsClick,
+    onDone: () -> Unit = {}
 ) {
     val focusRequester = remember { FocusRequester() }
     val view = LocalView.current
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val publishedNote = state.publishedNote
     val infinite = rememberInfiniteTransition(label = "cursor")
     val cursorAlpha by infinite.animateFloat(
         initialValue = 1f, targetValue = 0.55f,
@@ -67,6 +77,14 @@ fun ComposerScreen(
         kotlinx.coroutines.delay(80)
         try { focusRequester.requestFocus() } catch (_: Exception) {}
         tick()
+    }
+
+    // Keep the published confirmation actionable for a moment, then close the capture app.
+    LaunchedEffect(state.showSuccess) {
+        if (state.showSuccess) {
+            kotlinx.coroutines.delay(8000)
+            onDone()
+        }
     }
 
     val successScale by animateFloatAsState(
@@ -204,8 +222,8 @@ fun ComposerScreen(
                             label = "publishContent"
                         ) { success ->
                             if (success) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
+                                Column(
+                                    horizontalAlignment = Alignment.End,
                                     modifier = Modifier
                                         .alpha(successScale)
                                         .semantics {
@@ -213,9 +231,28 @@ fun ComposerScreen(
                                             stateDescription = "Published"
                                         }
                                 ) {
-                                    Text("✓", color = MaterialTheme.colorScheme.primary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Published", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text("✓", color = MaterialTheme.colorScheme.primary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Published", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                                    }
+                                    if (publishedNote != null) {
+                                        Spacer(Modifier.height(4.dp))
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            TextButton(onClick = {
+                                                clipboard.setText(AnnotatedString(publishedNote.nevent))
+                                                Toast.makeText(context, "Note link copied", Toast.LENGTH_SHORT).show()
+                                            }) { Text("Copy link") }
+                                            TextButton(onClick = {
+                                                try {
+                                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(publishedNote.url)))
+                                                } catch (_: Exception) {
+                                                    Toast.makeText(context, "No app to open the link", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }) { Text("Open") }
+                                            TextButton(onClick = onDone) { Text("Done") }
+                                        }
+                                    }
                                 }
                             } else {
                                 Button(
