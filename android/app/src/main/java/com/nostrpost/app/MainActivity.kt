@@ -85,8 +85,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         // Predictive back already enabled via manifest; ensure window callback
-        // Share target pre-process
-        handleShareIntent(intent)
+        // Share target pre-process: only for a fresh launch. On rotation the activity is
+        // recreated with the same launch Intent, which must not be applied a second time.
+        if (savedInstanceState == null) {
+            handleShareIntent(intent)
+        }
 
         pendingQuickCompose = intent.getBooleanExtra("quick_compose", false) ||
                 intent.getStringExtra("quick_compose") == "1" ||
@@ -156,19 +159,8 @@ class MainActivity : ComponentActivity() {
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
             val shared = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
             if (!shared.isNullOrBlank()) {
-                // Defer until viewModel ready
-                lifecycleScope.launch {
-                    // Wait for prefs load a bit
-                    kotlinx.coroutines.delay(300)
-                    // Only if setup complete, prefill composer; else keep for later
-                    val isSetup = prefs.isSetupFlow.first()
-                    if (isSetup) {
-                        viewModel.onContentChange(shared.take(560)) // NIP-01 reasonable limit
-                    } else {
-                        // Save as draft so after setup it's there
-                        prefs.setDraft(shared.take(560))
-                    }
-                }
+                // The ViewModel decides whether to apply immediately or queue until setup.
+                viewModel.onSharedText(shared)
             }
         }
     }

@@ -38,6 +38,7 @@ class Preferences(private val context: Context) {
         val KEY_RELAYS = stringPreferencesKey("relays_json") // JSON array string
         val KEY_KEY_PROTECTION = stringPreferencesKey("key_protection") // StrongBox, Hardware, Software
         val KEY_NPUB = stringPreferencesKey("npub_cache")
+        val KEY_PENDING_SHARE = stringPreferencesKey("pending_share")
     }
 
     val draftFlow: Flow<String> = context.dataStore.data.map { it[KEY_DRAFT] ?: "" }
@@ -46,6 +47,7 @@ class Preferences(private val context: Context) {
     val pubkeyFlow: Flow<String?> = context.dataStore.data.map { it[KEY_PUBKEY] }
     val signerPackageFlow: Flow<String?> = context.dataStore.data.map { it[KEY_SIGNER_PACKAGE] }
     val keyProtectionFlow: Flow<String?> = context.dataStore.data.map { it[KEY_KEY_PROTECTION] }
+    val pendingShareFlow: Flow<String?> = context.dataStore.data.map { it[KEY_PENDING_SHARE] }
 
     val relaysFlow: Flow<List<String>> = context.dataStore.data.map { prefs ->
         val json = prefs[KEY_RELAYS]
@@ -82,6 +84,14 @@ class Preferences(private val context: Context) {
         context.dataStore.edit { prefs -> clearIdentityKeys(prefs) }
     }
     suspend fun clearDraft() = context.dataStore.edit { it[KEY_DRAFT] = "" }
+
+    suspend fun setPendingShare(text: String) {
+        context.dataStore.edit { it[KEY_PENDING_SHARE] = text }
+    }
+
+    suspend fun clearPendingShare() {
+        context.dataStore.edit { it.remove(KEY_PENDING_SHARE) }
+    }
 
     // Synchronous quick read for widget? Use flow first; for simple we provide suspend functions
     suspend fun getDraftOnce(): String {

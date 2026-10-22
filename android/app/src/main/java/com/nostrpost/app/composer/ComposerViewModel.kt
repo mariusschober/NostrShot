@@ -55,6 +55,7 @@ class ComposerViewModel(
 
     private var draftJob: Job? = null
     private var pendingPublishContent: String? = null
+    private var consumedPendingShare = false
 
     init {
         viewModelScope.launch {
@@ -64,9 +65,13 @@ class ComposerViewModel(
             val pubkey = prefs.pubkeyFlow.first()
             val relays = prefs.relaysFlow.first()
             _state.value = _state.value.copy(content = draft, isSetup = isSetup, pubkey = pubkey, relays = relays)
-            // Observe setup changes
+            // Observe setup changes; a share that arrived before onboarding is consumed once setup
+            // completes instead of being lost or overwriting later typing.
             launch {
-                prefs.isSetupFlow.collect { isS -> _state.value = _state.value.copy(isSetup = isS) }
+                prefs.isSetupFlow.collect { isS ->
+                    _state.value = _state.value.copy(isSetup = isS)
+                    if (isS) consumePendingShareIfAny()
+                }
             }
             launch {
                 prefs.pubkeyFlow.collect { pk -> _state.value = _state.value.copy(pubkey = pk) }
@@ -89,6 +94,41 @@ class ComposerViewModel(
     }
 
     fun clearEffect() { _effect.value = null }
+
+    /**
+     * Applies text shared into the app. Before onboarding the text is queued and applied once
+     * setup completes; afterwards it is merged into the current draft (never silently replaces
+     * what the user already typed).
+     */
+    fun onSharedText(text: String) {
+        val shared = text.trim()
+        if (shared.isEmpty()) return
+        if (_state.value.isSetup) {
+            applySharedText(shared)
+            viewModelScope.launch { prefs.clearPendingShare() }
+        } else {
+            viewModelScope.launch {
+                val pending = prefs.pendingShareFlow.first().orEmpty()
+                prefs.setPendingShare(mergeSharedText(pending, shared))
+            }
+        }
+    }
+
+    private suspend fun consumePendingShareIfAny() {
+        if (consumedPendingShare) return
+        consumedPendingShare = true
+        val pending = prefs.pendingShareFlow.first()?.trim().orEmpty()
+        if (pending.isEmpty()) return
+        applySharedText(pending)
+        prefs.clearPendingShare()
+    }
+
+    private fun applySharedText(shared: String) {
+        val merged = mergeSharedText(_state.value.content, shared)
+        _state.value = _state.value.copy(content = merged, errorMessage = null)
+        draftJob?.cancel()
+        viewModelScope.launch { prefs.setDraft(merged) }
+    }
 
     fun onPublishClicked() {
         val content = _state.value.content.trim()
@@ -246,4 +286,11 @@ class ComposerViewModel(
     }
 
     fun dismissError() { _state.value = _state.value.copy(errorMessage = null) }
+}
+
+/** Merge shared text without truncating it or destroying an existing draft. */
+internal fun mergeSharedText(current: String, shared: String): String {
+    val trimmedShared = shared.trim()
+    if (trimmedShared.isEmpty()) return current
+    return if (current.isBlank()) trimmedShared else current.trimEnd() + "\n\n" + trimmedShared
 }
