@@ -1,6 +1,6 @@
 <resources>
     <style name="Theme.NostrPost" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowBackground">@color/window_background_light</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
@@ -9,10 +9,10 @@
 
     <!-- Splash theme: icon matches widget glyph, no delay -->
     <style name="Theme.NostrPost.Splash" parent="Theme.SplashScreen">
-        <item name="windowSplashScreenBackground">@android:color/white</item>
+        <item name="windowSplashScreenBackground">@color/window_background_light</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_edit</item>
         <item name="windowSplashScreenAnimationDuration">120</item>
         <item name="postSplashScreenTheme">@style/Theme.NostrPost</item>
-        <item name="windowSplashScreenIconBackgroundColor">@android:color/white</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/window_background_light</item>
     </style>
 </resources>

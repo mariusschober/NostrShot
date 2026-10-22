@@ -1,0 +1,18 @@
+<resources>
+    <!-- Dark cold-start theme: avoids the white flash before Compose's dark theme loads. -->
+    <style name="Theme.NostrPost" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background_dark</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+
+    <style name="Theme.NostrPost.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/window_background_dark</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_edit_on_dark</item>
+        <item name="windowSplashScreenAnimationDuration">120</item>
+        <item name="postSplashScreenTheme">@style/Theme.NostrPost</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/window_background_dark</item>
+    </style>
+</resources>
