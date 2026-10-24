@@ -105,6 +105,10 @@ class CreateIdentityViewModel(
     /** Drops the current secret so the next visit starts with a fresh identity. */
     fun discard() {
         identity.secret.fill(0)
+        nsecValue = ""
+        npubValue = ""
+        _step.value = 0
+        _effect.value = null
         needsNewIdentity = true
     }
 

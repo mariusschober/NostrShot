@@ -33,6 +33,8 @@ fun CreateIdentityScreen(
     // The nsec is visible on this screen, so keep it out of screenshots and the recents preview.
     SecureWindow()
 
+    // Activity-scoped, so a rotation keeps the generated identity. Every explicit way out of the
+    // route calls discard() below; the ViewModel is only recreated after the activity finishes.
     val viewModel: CreateIdentityViewModel = viewModel()
     val step by viewModel.step.collectAsStateWithLifecycle()
     val saving by viewModel.saving.collectAsStateWithLifecycle()

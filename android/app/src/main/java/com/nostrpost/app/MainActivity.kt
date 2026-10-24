@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -201,7 +202,8 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun AppRoot() {
         var setupNeeded by remember { mutableStateOf<Boolean?>(null) }
-        var nav by remember { mutableStateOf("composer") } // composer, setup, import, confirm, create, settings
+        // Only a plain route name: secrets and pending imports stay out of saved instance state.
+        var nav by rememberSaveable { mutableStateOf(AppRoute.COMPOSER) }
         var importError by remember { mutableStateOf<String?>(null) }
         var pendingImport by remember { mutableStateOf<KeyImport.Result.Ok?>(null) }
         var pendingImportRaw by remember { mutableStateOf<String?>(null) }
@@ -238,7 +240,7 @@ class MainActivity : ComponentActivity() {
             prefs.isSetupFlow.collect { isSetup ->
                 setupNeeded = !isSetup
                 // if setup needed and nav is composer, switch to setup
-                if (isSetup.not() && nav == "composer") {
+                if (isSetup.not() && nav == AppRoute.COMPOSER) {
                     // stay? Actually initial will be setup
                 }
             }
@@ -251,7 +253,11 @@ class MainActivity : ComponentActivity() {
                 false
             }
             setupNeeded = !isSetup
-            if (!isSetup) nav = "setup"
+            // Only default to setup on a fresh/restored composer route. A restored create/import
+            // route belongs to the setup flow and must remain visible.
+            if (!isSetup && AppRoute.resolve(nav, pendingImport != null) == AppRoute.COMPOSER) {
+                nav = AppRoute.SETUP
+            }
         }
         LaunchedEffect(Unit) {
             Preferences.preferencesResetEvents.collect {
@@ -263,13 +269,15 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        val route = AppRoute.resolve(nav, pendingImport != null)
+
         when {
             setupNeeded == null -> {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             }
-            nav == "setup" -> {
+            route == AppRoute.SETUP -> {
                 SetupScreen(
                     hasSigner = signerAvailable,
                     signerLabels = signerLabels,
@@ -282,8 +290,8 @@ class MainActivity : ComponentActivity() {
                             Toast.makeText(context, msgNoSignerApp, Toast.LENGTH_SHORT).show()
                         }
                     },
-                    onUseLocal = { nav = "import" },
-                    onCreateNew = { nav = "create" },
+                    onUseLocal = { nav = AppRoute.IMPORT },
+                    onCreateNew = { nav = AppRoute.CREATE },
                     onInstallAmber = {
                         try {
                             val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/greenart7c3/Amber"))
@@ -293,10 +301,10 @@ class MainActivity : ComponentActivity() {
                 )
                 // If setup completed externally, navigate
                 LaunchedEffect(composeState.isSetup) {
-                    if (composeState.isSetup) nav = "composer"
+                    if (composeState.isSetup) nav = AppRoute.COMPOSER
                 }
             }
-            nav == "import" -> {
+            route == AppRoute.IMPORT -> {
                 // Mark window secure during import
                 SecureWindow()
                 ImportScreen(
@@ -311,18 +319,18 @@ class MainActivity : ComponentActivity() {
                                 pendingImport?.secret?.fill(0)
                                 pendingImport = parsed
                                 pendingImportRaw = input
-                                nav = "confirm"
+                                nav = AppRoute.CONFIRM
                             }
                         }
                     },
-                    onBack = { nav = "setup" },
+                    onBack = { nav = AppRoute.SETUP },
                     error = importError
                 )
             }
-            nav == "confirm" -> {
+            route == AppRoute.CONFIRM -> {
                 val pending = pendingImport
                 if (pending == null) {
-                    LaunchedEffect(Unit) { nav = "import" }
+                    LaunchedEffect(Unit) { nav = AppRoute.IMPORT }
                 } else {
                     ConfirmIdentityScreen(
                         pubkeyHex = pending.pubkeyHex,
@@ -332,10 +340,10 @@ class MainActivity : ComponentActivity() {
                                     signerRepo.storeLocalIdentity(pending.secret, pending.pubkeyHex)
                                     pendingImportRaw?.let { clearClipboardIfMatches(it) }
                                     Toast.makeText(context, msgKeyImported, Toast.LENGTH_SHORT).show()
-                                    nav = "composer"
+                                    nav = AppRoute.COMPOSER
                                 } catch (e: Exception) {
                                     importError = e.message ?: "Import failed"
-                                    nav = "import"
+                                    nav = AppRoute.IMPORT
                                 } finally {
                                     pending.secret.fill(0)
                                     pendingImport = null
@@ -347,28 +355,28 @@ class MainActivity : ComponentActivity() {
                             pending.secret.fill(0)
                             pendingImport = null
                             pendingImportRaw = null
-                            nav = "import"
+                            nav = AppRoute.IMPORT
                         }
                     )
                 }
             }
-            nav == "create" -> {
+            route == AppRoute.CREATE -> {
                 CreateIdentityScreen(
                     onStore = { secret, pubkeyHex ->
                         signerRepo.storeLocalIdentity(secret, pubkeyHex)
                     },
                     onCreated = {
                         Toast.makeText(context, msgIdentityCreated, Toast.LENGTH_SHORT).show()
-                        nav = "composer"
+                        nav = AppRoute.COMPOSER
                     },
                     onError = { message ->
                         importError = message
-                        nav = "setup"
+                        nav = AppRoute.SETUP
                     },
-                    onBack = { nav = "setup" }
+                    onBack = { nav = AppRoute.SETUP }
                 )
             }
-            nav == "settings" -> {
+            route == AppRoute.SETTINGS -> {
                 val relays by prefs.relaysFlow.collectAsState(initial = com.nostrpost.app.nostr.RelayConfig.DEFAULT_RELAYS)
                 val pubkey by prefs.pubkeyFlow.collectAsState(initial = null)
                 val mode by prefs.signerModeFlow.collectAsState(initial = null)
@@ -403,13 +411,13 @@ class MainActivity : ComponentActivity() {
                     onChangeSigner = {
                         lifecycleScope.launch {
                             signerRepo.clearIdentity()
-                            nav = "setup"
+                            nav = AppRoute.SETUP
                         }
                     },
                     onRemoveKey = {
                         lifecycleScope.launch {
                             signerRepo.clearIdentity()
-                            nav = "setup"
+                            nav = AppRoute.SETUP
                             Toast.makeText(context, msgKeyRemoved, Toast.LENGTH_SHORT).show()
                         }
                     },
@@ -428,7 +436,7 @@ class MainActivity : ComponentActivity() {
                     onResetRelays = {
                         lifecycleScope.launch { prefs.setRelays(com.nostrpost.app.nostr.RelayConfig.DEFAULT_RELAYS) }
                     },
-                    onBack = { nav = "composer" }
+                    onBack = { nav = AppRoute.COMPOSER }
                 )
             }
             else -> {
@@ -437,15 +445,15 @@ class MainActivity : ComponentActivity() {
                     state = composeState,
                     onContentChange = { viewModel.onContentChange(it) },
                     onPublish = { viewModel.onPublishClicked() },
-                    onSettingsClick = { nav = "settings" },
+                    onSettingsClick = { nav = AppRoute.SETTINGS },
                     onRetry = { viewModel.onRetry() },
                     onDismissError = { viewModel.dismissError() },
-                    onOpenSettingsFromError = { nav = "settings" },
+                    onOpenSettingsFromError = { nav = AppRoute.SETTINGS },
                     onDone = { viewModel.onDoneAfterPublish() }
                 )
                 // If setup incomplete but we somehow reached composer, redirect
                 LaunchedEffect(composeState.isSetup) {
-                    if (!composeState.isSetup) nav = "setup"
+                    if (!composeState.isSetup) nav = AppRoute.SETUP
                 }
             }
         }

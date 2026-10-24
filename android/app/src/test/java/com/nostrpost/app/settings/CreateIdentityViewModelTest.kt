@@ -28,6 +28,10 @@ class CreateIdentityViewModelTest {
         IdentityGenerator.GeneratedIdentity(secret.copyOf(), pubkey)
     }
 
+    private fun newViewModel(
+        identityFactory: () -> IdentityGenerator.GeneratedIdentity
+    ): CreateIdentityViewModel = CreateIdentityViewModel(identityFactory)
+
     private fun clear(viewModel: CreateIdentityViewModel) {
         val store = ViewModelStore()
         val factory = object : ViewModelProvider.Factory {
@@ -64,6 +68,53 @@ class CreateIdentityViewModelTest {
 
         viewModel.goBackToBackupStep()
         assertEquals(0, viewModel.step.value)
+    }
+
+    @Test
+    fun prepareKeepsIdentityForConfigurationChange() {
+        val viewModel = newViewModel()
+        val secretReference = viewModel.secretBytes
+        val nsec = viewModel.nsec()
+
+        viewModel.prepare()
+
+        assertFalse(secretReference.all { it == 0.toByte() })
+        assertEquals(nsec, viewModel.nsec())
+        assertEquals(Bech32.toNpub(pubkey), viewModel.npub())
+    }
+
+    @Test
+    fun discardZeroesSecretAndNextVisitGeneratesFreshIdentity() {
+        val freshSecret = ByteArray(32) { (it + 101).toByte() }
+        val freshPubkey = "cd".repeat(32)
+        var generations = 0
+        val viewModel = newViewModel {
+            generations++
+            if (generations == 1) {
+                IdentityGenerator.GeneratedIdentity(secret.copyOf(), pubkey)
+            } else {
+                IdentityGenerator.GeneratedIdentity(freshSecret.copyOf(), freshPubkey)
+            }
+        }
+        val secretReference = viewModel.secretBytes
+        val oldNsec = viewModel.nsec()
+        viewModel.goToConfirmStep()
+
+        viewModel.discard()
+
+        assertEquals(1, generations)
+        assertTrue(secretReference.all { it == 0.toByte() })
+        assertTrue(viewModel.nsec().isEmpty())
+        assertEquals(0, viewModel.step.value)
+
+        viewModel.prepare()
+
+        assertEquals(2, generations)
+        assertArrayEquals(freshSecret, viewModel.secretBytes)
+        assertEquals(Bech32.encode("nsec", freshSecret), viewModel.nsec())
+        assertEquals(Bech32.toNpub(freshPubkey), viewModel.npub())
+        assertEquals(0, viewModel.step.value)
+        assertFalse(oldNsec == viewModel.nsec())
     }
 
     @Test
