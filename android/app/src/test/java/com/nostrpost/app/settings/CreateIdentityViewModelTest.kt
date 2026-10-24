@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import com.nostrpost.app.nostr.Bech32
 import com.nostrpost.app.signing.IdentityGenerator
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -15,6 +16,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -195,6 +197,209 @@ class CreateIdentityViewModelTest {
             assertArrayEquals(secret, storedSecret)
             assertEquals(pubkey, storedPubkey)
             assertEquals(CreateIdentityEffect.Stored, viewModel.effect.value)
+            assertFalse(viewModel.saving.value)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun discardDuringSaveDoesNotChangeBytesSeenByStore() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val viewModel = newViewModel()
+            viewModel.goToConfirmStep()
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var received: ByteArray? = null
+            var receivedPubkey: String? = null
+
+            viewModel.confirm { secretBytes, pubkeyHex ->
+                received = secretBytes.copyOf()
+                receivedPubkey = pubkeyHex
+                entered.complete(Unit)
+                release.await()
+            }
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+
+            viewModel.discard()
+
+            assertArrayEquals(secret, received)
+            assertEquals(pubkey, receivedPubkey)
+            assertFalse(
+                "discard must not zero the identity while the save is in flight",
+                viewModel.secretBytes.all { it == 0.toByte() }
+            )
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            assertArrayEquals(secret, received)
+            assertEquals(pubkey, receivedPubkey)
+            assertEquals(CreateIdentityEffect.Stored, viewModel.effect.value)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun onClearedDuringSaveDoesNotCorruptBytesAndSaveCompletes() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val viewModel = newViewModel()
+            viewModel.goToConfirmStep()
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var received: ByteArray? = null
+            var storeReference: ByteArray? = null
+
+            viewModel.confirm { secretBytes, _ ->
+                storeReference = secretBytes
+                received = secretBytes.copyOf()
+                entered.complete(Unit)
+                release.await()
+            }
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+
+            clear(viewModel)
+
+            assertFalse("clearing must not abort a started save", release.isCompleted)
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            assertArrayEquals(secret, received)
+            assertNotNull(storeReference)
+            assertTrue(
+                "the store's copy must be wiped by the save",
+                storeReference!!.all { it == 0.toByte() }
+            )
+            assertTrue(
+                "onCleared only wipes the ViewModel's own array",
+                viewModel.secretBytes.all { it == 0.toByte() }
+            )
+            assertEquals(null, viewModel.effect.value)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun storeCopyIsZeroedAfterSuccessfulSave() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val viewModel = newViewModel()
+            viewModel.goToConfirmStep()
+            var storeReference: ByteArray? = null
+            var received: ByteArray? = null
+
+            viewModel.confirm { secretBytes, pubkeyHex ->
+                storeReference = secretBytes
+                received = secretBytes.copyOf()
+                assertEquals(pubkey, pubkeyHex)
+            }
+            advanceUntilIdle()
+
+            assertArrayEquals(secret, received)
+            assertNotNull(storeReference)
+            assertTrue(storeReference!!.all { it == 0.toByte() })
+            assertEquals(CreateIdentityEffect.Stored, viewModel.effect.value)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun storeCopyIsZeroedAfterFailedSave() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val viewModel = newViewModel()
+            viewModel.goToConfirmStep()
+            var storeReference: ByteArray? = null
+            var received: ByteArray? = null
+
+            viewModel.confirm { secretBytes, _ ->
+                storeReference = secretBytes
+                received = secretBytes.copyOf()
+                throw IllegalStateException("save failed")
+            }
+            advanceUntilIdle()
+
+            assertArrayEquals(secret, received)
+            assertNotNull(storeReference)
+            assertTrue(storeReference!!.all { it == 0.toByte() })
+            assertEquals(CreateIdentityEffect.Failed("save failed"), viewModel.effect.value)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun discardAndBackDuringSaveIsIgnoredAndDiscardsAfterSave() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val viewModel = newViewModel()
+            viewModel.goToConfirmStep()
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            var received: ByteArray? = null
+            var backs = 0
+
+            viewModel.confirm { secretBytes, _ ->
+                received = secretBytes.copyOf()
+                entered.complete(Unit)
+                release.await()
+            }
+            advanceUntilIdle()
+            assertTrue(entered.isCompleted)
+
+            viewModel.discardAndBack { backs++ }
+
+            assertEquals("back must be ignored while saving", 0, backs)
+            assertTrue(viewModel.saving.value)
+            assertFalse(viewModel.secretBytes.all { it == 0.toByte() })
+            assertArrayEquals(secret, received)
+
+            release.complete(Unit)
+            advanceUntilIdle()
+
+            assertEquals(0, backs)
+            assertTrue(viewModel.secretBytes.all { it == 0.toByte() })
+            assertTrue(viewModel.nsec().isEmpty())
+            assertEquals(0, viewModel.step.value)
+            assertEquals(CreateIdentityEffect.Stored, viewModel.effect.value)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun allZeroSecretIsRefused() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val viewModel = newViewModel {
+                IdentityGenerator.GeneratedIdentity(ByteArray(32), pubkey)
+            }
+            viewModel.goToConfirmStep()
+            var storeCalled = false
+
+            viewModel.confirm { _, _ -> storeCalled = true }
+            advanceUntilIdle()
+
+            assertFalse("an all-zero private key must never reach the store", storeCalled)
+            val effect = viewModel.effect.value
+            assertTrue(effect is CreateIdentityEffect.Failed)
+            assertTrue(
+                (effect as CreateIdentityEffect.Failed).message
+                    .contains("all-zero", ignoreCase = true)
+            )
             assertFalse(viewModel.saving.value)
         } finally {
             Dispatchers.resetMain()

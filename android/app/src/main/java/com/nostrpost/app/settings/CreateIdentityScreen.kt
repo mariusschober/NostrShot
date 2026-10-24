@@ -43,7 +43,8 @@ fun CreateIdentityScreen(
 
     // System back must abandon the generated identity, not just leave the route (which would keep
     // the nsec alive in the activity-scoped ViewModel). This is the only BackHandler for the route.
-    BackHandler { viewModel.discardAndBack(onBack) }
+    // While a save is in flight the ViewModel owns a copy of the key, so back must not discard it.
+    BackHandler(enabled = !saving) { viewModel.discardAndBack(onBack) }
 
     LaunchedEffect(viewModel) {
         viewModel.prepare()
@@ -117,7 +118,8 @@ fun CreateIdentityScreen(
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
                 onClick = { viewModel.discardAndBack(onBack) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !saving
             ) {
                 Text(stringResource(R.string.action_cancel))
             }

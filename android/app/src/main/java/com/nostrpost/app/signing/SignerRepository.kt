@@ -54,6 +54,9 @@ class SignerRepository(
      */
     suspend fun storeLocalIdentity(privKey32: ByteArray, pubkeyHex: String) {
         require(privKey32.size == 32) { "Private key must be 32 bytes" }
+        require(privKey32.any { it != 0.toByte() }) {
+            "Refusing to store an all-zero private key"
+        }
         var protection = "Unknown"
         // The real protection level is only knowable after the wrapping key exists.
         secretStore.storeSecret(privKey32) { lvl -> protection = lvl }
