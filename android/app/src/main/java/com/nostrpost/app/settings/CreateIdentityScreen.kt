@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.nostrpost.app.R
 import com.nostrpost.app.nostr.Bech32
 import com.nostrpost.app.signing.IdentityGenerator
+import com.nostrpost.app.ui.SecureWindow
 
 /**
  * Generates a new identity and shows the nsec exactly once, followed by a full-npub
@@ -26,6 +27,9 @@ fun CreateIdentityScreen(
     onCreate: (secret: ByteArray, pubkeyHex: String) -> Unit,
     onBack: () -> Unit
 ) {
+    // The nsec is visible on this screen, so keep it out of screenshots and the recents preview.
+    SecureWindow()
+
     val generated = remember { IdentityGenerator.generate() }
     val nsec = remember { Bech32.encode("nsec", generated.secret) }
     val npub = remember {
