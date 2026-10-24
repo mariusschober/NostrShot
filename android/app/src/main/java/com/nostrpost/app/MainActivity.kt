@@ -354,19 +354,16 @@ class MainActivity : ComponentActivity() {
             }
             nav == "create" -> {
                 CreateIdentityScreen(
-                    onCreate = { secret, pubkeyHex ->
-                        lifecycleScope.launch {
-                            try {
-                                signerRepo.storeLocalIdentity(secret, pubkeyHex)
-                                Toast.makeText(context, msgIdentityCreated, Toast.LENGTH_SHORT).show()
-                                nav = "composer"
-                            } catch (e: Exception) {
-                                importError = e.message ?: "Could not create identity"
-                                nav = "setup"
-                            }
-                            // The key stays valid until CreateIdentityScreen is disposed; it
-                            // zeroes the buffer itself so a failed save can be retried.
-                        }
+                    onStore = { secret, pubkeyHex ->
+                        signerRepo.storeLocalIdentity(secret, pubkeyHex)
+                    },
+                    onCreated = {
+                        Toast.makeText(context, msgIdentityCreated, Toast.LENGTH_SHORT).show()
+                        nav = "composer"
+                    },
+                    onError = { message ->
+                        importError = message
+                        nav = "setup"
                     },
                     onBack = { nav = "setup" }
                 )

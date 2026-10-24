@@ -8,15 +8,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nostrpost.app.R
-import com.nostrpost.app.nostr.Bech32
-import com.nostrpost.app.signing.IdentityGenerator
 import com.nostrpost.app.ui.SecureWindow
+import kotlinx.coroutines.flow.filterNotNull
 
 /**
  * Generates a new identity and shows the nsec exactly once, followed by a full-npub
@@ -24,23 +25,34 @@ import com.nostrpost.app.ui.SecureWindow
  */
 @Composable
 fun CreateIdentityScreen(
-    onCreate: (secret: ByteArray, pubkeyHex: String) -> Unit,
+    onStore: suspend (secret: ByteArray, pubkeyHex: String) -> Unit,
+    onCreated: () -> Unit,
+    onError: (String) -> Unit,
     onBack: () -> Unit
 ) {
     // The nsec is visible on this screen, so keep it out of screenshots and the recents preview.
     SecureWindow()
 
-    val generated = remember { IdentityGenerator.generate() }
-    val nsec = remember { Bech32.encode("nsec", generated.secret) }
-    val npub = remember {
-        try { Bech32.toNpub(generated.pubkeyHex) } catch (_: Exception) { generated.pubkeyHex }
-    }
+    val viewModel: CreateIdentityViewModel = viewModel()
+    val step by viewModel.step.collectAsStateWithLifecycle()
+    val saving by viewModel.saving.collectAsStateWithLifecycle()
     var revealed by remember { mutableStateOf(false) }
-    var step by remember { mutableStateOf(0) }
 
-    // Zero the in-memory secret when leaving the screen (the caller also zeroes after storing).
-    DisposableEffect(Unit) {
-        onDispose { generated.secret.fill(0) }
+    LaunchedEffect(viewModel) {
+        viewModel.prepare()
+        viewModel.effect.filterNotNull().collect { effect ->
+            viewModel.clearEffect()
+            when (effect) {
+                CreateIdentityEffect.Stored -> {
+                    viewModel.discard()
+                    onCreated()
+                }
+                is CreateIdentityEffect.Failed -> {
+                    viewModel.discard()
+                    onError(effect.message)
+                }
+            }
+        }
     }
 
     Column(
@@ -74,7 +86,7 @@ fun CreateIdentityScreen(
                     Spacer(Modifier.height(8.dp))
                     SelectionContainer {
                         Text(
-                            text = if (revealed) nsec else "nsec1" + "•".repeat(24),
+                            text = if (revealed) viewModel.nsec() else "nsec1" + "•".repeat(24),
                             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                             textAlign = TextAlign.Center
                         )
@@ -92,11 +104,17 @@ fun CreateIdentityScreen(
             }
             Spacer(Modifier.height(20.dp))
             Button(
-                onClick = { step = 1 },
+                onClick = { viewModel.goToConfirmStep() },
                 modifier = Modifier.fillMaxWidth().height(48.dp)
             ) { Text(stringResource(R.string.create_stored)) }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = {
+                    viewModel.discard()
+                    onBack()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(stringResource(R.string.action_cancel))
             }
         } else {
@@ -110,7 +128,7 @@ fun CreateIdentityScreen(
             Card(modifier = Modifier.fillMaxWidth()) {
                 SelectionContainer {
                     Text(
-                        text = npub,
+                        text = viewModel.npub(),
                         modifier = Modifier.padding(16.dp),
                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace)
                     )
@@ -118,11 +136,16 @@ fun CreateIdentityScreen(
             }
             Spacer(Modifier.height(20.dp))
             Button(
-                onClick = { onCreate(generated.secret, generated.pubkeyHex) },
-                modifier = Modifier.fillMaxWidth().height(48.dp)
+                onClick = { viewModel.confirm(onStore) },
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                enabled = !saving
             ) { Text(stringResource(R.string.create_button)) }
             Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { step = 0 }, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { viewModel.goBackToBackupStep() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !saving
+            ) {
                 Text(stringResource(R.string.create_back_to_key))
             }
         }
