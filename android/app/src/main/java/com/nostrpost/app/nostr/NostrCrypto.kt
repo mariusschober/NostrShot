@@ -76,11 +76,9 @@ object NostrCrypto {
         } catch (_: Exception) { false }
     }
 
-    fun isValidPubHex(hex: String): Boolean {
-        if (!Hex.isValidHex(hex, 32)) return false
-        return try {
-            // Try to parse via verification of dummy? We'll just check length
-            true
-        } catch (_: Exception) { false }
-    }
+    /**
+     * A pubkey is exactly 64 hex characters. Both cases are accepted, matching [Hex.decode],
+     * which lowercases before decoding.
+     */
+    fun isValidPubHex(hex: String): Boolean = Hex.isValidHex(hex, 32)
 }

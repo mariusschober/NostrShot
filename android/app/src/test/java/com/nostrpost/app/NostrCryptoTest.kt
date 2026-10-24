@@ -99,6 +99,27 @@ class NostrCryptoTest {
     }
 
     @Test
+    fun testPubHexRequiresExactly64HexCharacters() {
+        val valid = "0123456789abcdef".repeat(4)
+        assertEquals(64, valid.length)
+
+        assertTrue(NostrCrypto.isValidPubHex(valid))
+        assertTrue(NostrCrypto.isValidPubHex(valid.uppercase()))
+
+        assertFalse(NostrCrypto.isValidPubHex(valid.dropLast(1)))
+        assertFalse(NostrCrypto.isValidPubHex(valid + "0"))
+
+        assertFalse(NostrCrypto.isValidPubHex(valid.replaceRange(0, 1, "g")))
+        assertFalse(NostrCrypto.isValidPubHex(valid.replaceRange(0, 1, "z")))
+
+        assertFalse(NostrCrypto.isValidPubHex(" $valid"))
+        assertFalse(NostrCrypto.isValidPubHex("$valid "))
+        assertFalse(NostrCrypto.isValidPubHex(valid.replaceRange(10, 11, " ")))
+        assertFalse(NostrCrypto.isValidPubHex(""))
+        assertFalse(NostrCrypto.isValidPubHex(" ".repeat(64)))
+    }
+
+    @Test
     fun testSignLocallyHelper() {
         val goodPriv = "0000000000000000000000000000000000000000000000000000000000000001"
         val pub = NostrCrypto.pubkeyFromPriv(goodPriv)
