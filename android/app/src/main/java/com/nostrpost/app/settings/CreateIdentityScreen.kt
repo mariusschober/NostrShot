@@ -1,5 +1,6 @@
 package com.nostrpost.app.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -39,6 +40,10 @@ fun CreateIdentityScreen(
     val step by viewModel.step.collectAsStateWithLifecycle()
     val saving by viewModel.saving.collectAsStateWithLifecycle()
     var revealed by remember { mutableStateOf(false) }
+
+    // System back must abandon the generated identity, not just leave the route (which would keep
+    // the nsec alive in the activity-scoped ViewModel). This is the only BackHandler for the route.
+    BackHandler { viewModel.discardAndBack(onBack) }
 
     LaunchedEffect(viewModel) {
         viewModel.prepare()
@@ -111,10 +116,7 @@ fun CreateIdentityScreen(
             ) { Text(stringResource(R.string.create_stored)) }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(
-                onClick = {
-                    viewModel.discard()
-                    onBack()
-                },
+                onClick = { viewModel.discardAndBack(onBack) },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.action_cancel))

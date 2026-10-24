@@ -49,6 +49,8 @@ class CreateIdentityViewModelTest {
         val firstNsec = viewModel.nsec()
         assertEquals(firstNsec, viewModel.nsec())
         assertEquals(Bech32.encode("nsec", secret), firstNsec)
+        assertEquals(firstNsec.toCharArray().toList(), viewModel.nsecChars.toList())
+        assertFalse(viewModel.nsecChars.all { it == '\u0000' })
         assertEquals(Bech32.toNpub(pubkey), viewModel.npub())
         assertEquals(pubkey, viewModel.pubkeyHex())
         assertEquals(0, viewModel.step.value)
@@ -74,12 +76,15 @@ class CreateIdentityViewModelTest {
     fun prepareKeepsIdentityForConfigurationChange() {
         val viewModel = newViewModel()
         val secretReference = viewModel.secretBytes
+        val nsecReference = viewModel.nsecChars
         val nsec = viewModel.nsec()
 
         viewModel.prepare()
 
         assertFalse(secretReference.all { it == 0.toByte() })
+        assertFalse(nsecReference.all { it == '\u0000' })
         assertEquals(nsec, viewModel.nsec())
+        assertEquals(nsec.toCharArray().toList(), viewModel.nsecChars.toList())
         assertEquals(Bech32.toNpub(pubkey), viewModel.npub())
     }
 
@@ -97,6 +102,7 @@ class CreateIdentityViewModelTest {
             }
         }
         val secretReference = viewModel.secretBytes
+        val nsecReference = viewModel.nsecChars
         val oldNsec = viewModel.nsec()
         viewModel.goToConfirmStep()
 
@@ -104,6 +110,8 @@ class CreateIdentityViewModelTest {
 
         assertEquals(1, generations)
         assertTrue(secretReference.all { it == 0.toByte() })
+        assertTrue(nsecReference.all { it == '\u0000' })
+        assertTrue(viewModel.nsecChars.all { it == '\u0000' })
         assertTrue(viewModel.nsec().isEmpty())
         assertEquals(0, viewModel.step.value)
 
@@ -112,6 +120,7 @@ class CreateIdentityViewModelTest {
         assertEquals(2, generations)
         assertArrayEquals(freshSecret, viewModel.secretBytes)
         assertEquals(Bech32.encode("nsec", freshSecret), viewModel.nsec())
+        assertFalse(viewModel.nsecChars.all { it == '\u0000' })
         assertEquals(Bech32.toNpub(freshPubkey), viewModel.npub())
         assertEquals(0, viewModel.step.value)
         assertFalse(oldNsec == viewModel.nsec())
@@ -121,11 +130,48 @@ class CreateIdentityViewModelTest {
     fun secretIsClearedWhenViewModelIsCleared() {
         val viewModel = newViewModel()
         val secretReference = viewModel.secretBytes
+        val nsecReference = viewModel.nsecChars
         assertFalse(secretReference.all { it == 0.toByte() })
+        assertFalse(nsecReference.all { it == '\u0000' })
 
         clear(viewModel)
 
         assertTrue(secretReference.all { it == 0.toByte() })
+        assertTrue(nsecReference.all { it == '\u0000' })
+        assertTrue(viewModel.nsec().isEmpty())
+    }
+
+    @Test
+    fun discardAndBackDiscardsBeforeNavigating() {
+        val freshSecret = ByteArray(32) { (it + 101).toByte() }
+        val freshPubkey = "cd".repeat(32)
+        var generations = 0
+        val viewModel = newViewModel {
+            generations++
+            if (generations == 1) {
+                IdentityGenerator.GeneratedIdentity(secret.copyOf(), pubkey)
+            } else {
+                IdentityGenerator.GeneratedIdentity(freshSecret.copyOf(), freshPubkey)
+            }
+        }
+        val secretReference = viewModel.secretBytes
+        val nsecReference = viewModel.nsecChars
+        var backs = 0
+
+        viewModel.discardAndBack {
+            backs++
+            // The navigation callback must only run after the secret has been wiped.
+            assertTrue(secretReference.all { it == 0.toByte() })
+            assertTrue(nsecReference.all { it == '\u0000' })
+            assertTrue(viewModel.nsec().isEmpty())
+        }
+
+        assertEquals(1, backs)
+        assertEquals(0, viewModel.step.value)
+        viewModel.prepare()
+        assertEquals(2, generations)
+        assertArrayEquals(freshSecret, viewModel.secretBytes)
+        assertEquals(Bech32.encode("nsec", freshSecret), viewModel.nsec())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

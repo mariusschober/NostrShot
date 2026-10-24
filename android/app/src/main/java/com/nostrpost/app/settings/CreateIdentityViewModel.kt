@@ -20,6 +20,11 @@ sealed interface CreateIdentityEffect {
  *
  * The secret is deliberately kept out of saved instance state. It is zeroed when the ViewModel is
  * cleared, and when the screen explicitly discards the session (back/cancel or after a save).
+ *
+ * The nsec lives in [nsecBuffer] as a CharArray rather than a long-lived String so it can be
+ * wiped. Compose's Text still needs a String, so [nsec] necessarily creates an immutable copy for
+ * the UI. That copy cannot be zeroed and may remain reachable until the composition/framework
+ * releases it and the GC reclaims it; callers should request it only while it is displayed.
  */
 class CreateIdentityViewModel(
     private val identityFactory: () -> IdentityGenerator.GeneratedIdentity
@@ -28,13 +33,14 @@ class CreateIdentityViewModel(
     constructor() : this({ IdentityGenerator.generate() })
 
     private var identity = identityFactory()
-    private var nsecValue = Bech32.encode("nsec", identity.secret)
+    private var nsecBuffer: CharArray = encodeNsec(identity.secret)
     private var npubValue = try {
         Bech32.toNpub(identity.pubkeyHex)
     } catch (_: Exception) {
         identity.pubkeyHex
     }
     private var needsNewIdentity = false
+    private var secretAvailable = true
 
     private val _step = MutableStateFlow(0)
     val step: StateFlow<Int> = _step.asStateFlow()
@@ -48,7 +54,15 @@ class CreateIdentityViewModel(
     internal val secretBytes: ByteArray
         get() = identity.secret
 
-    fun nsec(): String = nsecValue
+    /** Test-visible view of the wipeable nsec buffer. Do not keep this reference in UI code. */
+    internal val nsecChars: CharArray
+        get() = nsecBuffer
+
+    /**
+     * Returns a fresh String copy only while the identity is live. The copy is transient and
+     * cannot be wiped, because Compose Text requires a String; [nsecBuffer] remains canonical.
+     */
+    fun nsec(): String = if (secretAvailable) String(nsecBuffer) else ""
 
     fun npub(): String = npubValue
 
@@ -90,8 +104,9 @@ class CreateIdentityViewModel(
     fun prepare() {
         if (!needsNewIdentity) return
         identity.secret.fill(0)
+        nsecBuffer.fill('\u0000')
         identity = identityFactory()
-        nsecValue = Bech32.encode("nsec", identity.secret)
+        nsecBuffer = encodeNsec(identity.secret)
         npubValue = try {
             Bech32.toNpub(identity.pubkeyHex)
         } catch (_: Exception) {
@@ -100,19 +115,32 @@ class CreateIdentityViewModel(
         _step.value = 0
         _effect.value = null
         needsNewIdentity = false
+        secretAvailable = true
     }
 
     /** Drops the current secret so the next visit starts with a fresh identity. */
     fun discard() {
         identity.secret.fill(0)
-        nsecValue = ""
+        nsecBuffer.fill('\u0000')
         npubValue = ""
         _step.value = 0
         _effect.value = null
         needsNewIdentity = true
+        secretAvailable = false
+    }
+
+    /** Handles the system back gesture exactly like the explicit cancel button. */
+    internal fun discardAndBack(onBack: () -> Unit) {
+        discard()
+        onBack()
     }
 
     override fun onCleared() {
         identity.secret.fill(0)
+        nsecBuffer.fill('\u0000')
+        secretAvailable = false
     }
+
+    private fun encodeNsec(secret: ByteArray): CharArray =
+        Bech32.encode("nsec", secret).toCharArray()
 }
